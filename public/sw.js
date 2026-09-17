@@ -4,7 +4,7 @@
 // - /api/checkin/members: network first, cached copy when offline
 // - Background Sync "checkin-sync": flush the IndexedDB queue (same DB as src/lib/offline-db.ts)
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `checkin-shell-${VERSION}`;
 const STATIC_CACHE = `checkin-static-${VERSION}`;
 const DATA_CACHE = `checkin-data-${VERSION}`;
@@ -95,8 +95,11 @@ async function networkFirst(request, cacheName, cacheKey, timeoutMs) {
     return res;
   } catch (err) {
     const hit = await cache.match(cacheKey, { ignoreSearch: true });
-    if (hit) return hit;
-    throw err;
+    if (!hit) throw err;
+    // Flag it so the page knows the server was not actually reached.
+    const headers = new Headers(hit.headers);
+    headers.set("X-SW-Cache", "hit");
+    return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers });
   }
 }
 

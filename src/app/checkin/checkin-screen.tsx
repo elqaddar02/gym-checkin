@@ -127,6 +127,8 @@ export function CheckinScreen() {
     try {
       const res = await fetch("/api/checkin/members", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Served by the service worker's offline copy: IndexedDB already has this data.
+      if (res.headers.get("X-SW-Cache") === "hit") throw new Error("offline");
       const body = (await res.json()) as { members: ReceptionMember[]; fetchedAt: string };
       // Don't lose "already in today" info from check-ins the server hasn't seen yet.
       const pending = await getQueue();
