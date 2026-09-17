@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SubscriptionStatus {
+  active
+  expired
+  paused
+}
+
+enum PaymentMethod {
+  cash
+  card
+  transfer
+}
+
+enum OverrideReason {
+  cash_paid
+  owner_approved
+  other
+}
+
+model Member {
+  id            String         @id @default(uuid()) @db.Uuid
+  phone         String         @unique // normalized, e.g. +212612345678
+  name          String
+  notes         String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  subscriptions Subscription[]
+  checkIns      CheckIn[]
+
+  @@map("members")
+}
+
+model Subscription {
+  id            String             @id @default(uuid()) @db.Uuid
+  memberId      String             @map("member_id") @db.Uuid
+  member        Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  status        SubscriptionStatus @default(active)
+  amount        Int // MAD
+  startDate     DateTime           @map("start_date") @db.Date
+  // For a paused subscription this is the return date.
+  endDate       DateTime           @map("end_date") @db.Date
+  paymentMethod PaymentMethod      @map("payment_method")
+  receiptNumber String?            @map("receipt_number")
+  notes         String?
+  createdAt     DateTime           @default(now()) @map("created_at")
+  createdBy     String             @map("created_by")
+
+  @@index([memberId, startDate])
+  @@index([endDate])
+  @@map("subscriptions")
+}
+
+model CheckIn {
+  // Generated on the tablet so offline retries are idempotent.
+  id             String          @id @db.Uuid
+  memberId       String          @map("member_id") @db.Uuid
+  member         Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  checkedInAt    DateTime        @map("checked_in_at")
+  overrideReason OverrideReason? @map("override_reason")
+  synced         Boolean         @default(true)
+
+  @@index([memberId, checkedInAt])
+  @@index([checkedInAt])
+  @@map("check_ins")
+}
+
+model Owner {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("owners")
+}
