@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gym Check-In
 
-## Getting Started
+Reception check-in (offline-first) + owner member management and dashboard.
+Next.js 16 · Prisma 7 / Postgres · NextAuth (credentials) · shadcn/ui.
 
-First, run the development server:
+| URL | Who | Auth |
+| --- | --- | --- |
+| `/checkin` | Receptionist (tablet) | none — works offline |
+| `/members` | Owner | login |
+| `/dashboard` | Owner | login |
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env        # then fill DATABASE_URL and NEXTAUTH_SECRET
+npm run db:migrate          # creates tables (and the database if missing)
+npm run owner -- owner@example.com "a-long-password"
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Import existing members (optional; try `--dry-run` first):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run import:members -- members.csv --dry-run
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+CSV columns: `name, phone, notes, start_date, end_date, amount, payment_method, receipt_number, status`.
+Only `name` and `phone` are required. Dates `YYYY-MM-DD` or `DD/MM/YYYY`. Comma or semicolon separated.
 
-## Learn More
+## How it works
 
-To learn more about Next.js, take a look at the following resources:
+**Status** is computed from the most recently started subscription:
+active and `end_date >= today` → 🟢 paid · `paused` → 🟡 (end date = return date) ·
+otherwise → 🔴 expired · no subscription → ⚫ blocked.
+Expired and paused members can be let in with an override reason.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Offline.** Every check-in is written to IndexedDB *first*, then sent to
+`POST /api/checkins/batch`. Ids are generated on the tablet, so retries are idempotent.
+The queue is flushed on reconnect, every 15 s, and via Background Sync (Chromium).
+The member list is cached in IndexedDB and refreshed every 2 minutes.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The service worker (`public/sw.js`) is only registered in production builds.
+To test offline locally: `npm run build && npm start`, open `/checkin` once online,
+then go offline in DevTools and reload.
 
-## Deploy on Vercel
+**Revenue** on the dashboard = subscriptions whose period *starts* in the current month.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy (Vercel)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Create a Postgres database (Neon / Vercel Postgres); set `DATABASE_URL`,
+   `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `NEXT_PUBLIC_GYM_TZ` in the project.
+2. Run migrations against it: `npm run db:deploy`.
+3. Create the owner: `npm run owner -- email "password"` (with production `DATABASE_URL`).
+4. On the reception tablet, open `/checkin` once while online and "Add to Home Screen".
