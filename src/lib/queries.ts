@@ -1,10 +1,10 @@
 import "server-only";
-import { addDays, localDate, localHour, todayYmd } from "./dates";
+import { addDays, dbDateToYmd, formatDayMonth, localDate, localHour, todayYmd, ymdToDbDate } from "./dates";
 import { phoneQueryDigits, phoneSearchKey } from "./phone";
 import { prisma } from "./prisma";
 import { toSubscriptionDTO } from "./serialize";
 import { currentSubscription, memberStatus, statusSortKey, type MemberStatus } from "./status";
-import type { OverrideReason, PaymentMethod, SubscriptionDTO } from "./types";
+import { OVERRIDE_LABELS, PAYMENT_LABELS, type OverrideReason, type PaymentMethod, type SubscriptionDTO } from "./types";
 
 export interface MemberRow {
   id: string;
@@ -78,14 +78,31 @@ export async function getMemberDetail(id: string) {
 
 export type MemberDetail = NonNullable<Awaited<ReturnType<typeof getMemberDetail>>>;
 
+/** One line of the activity module: entries, payments and sign-ups in one stream. */
+export interface ActivityEntry {
+  id: string;
+  kind: "checkin" | "override" | "payment" | "member";
+  at: string;
+  memberId: string;
+  name: string;
+  detail: string;
+}
+
 export interface DashboardData {
   month: string; // YYYY-MM
-  revenue: { total: number; byMethod: Record<PaymentMethod, number>; count: number };
-  expiringSoon: { id: string; name: string; phone: string; until: string; daysLeft: number }[];
-  checkInsToday: { total: number; byHour: number[] };
-  activeMembers: number;
-  totalMembers: number;
+  revenue: {
+    total: number;
+    byMethod: Record<PaymentMethod, number>;
+    count: number;
+    /** Same measure over the previous month, for the trend line. */
+    previousTotal: number;
+  };
+  expiringSoon: { id: string; name: string; phone: string; until: string; daysLeft: number; amount: number }[];
+  checkInsToday: { total: number; byHour: number[]; lastWeek: number };
+  members: { total: number; active: number; expired: number; paused: number; none: number };
+  /** Kept for the API's existing consumers; the dashboard reads `activity`. */
   recentCheckIns: { id: string; memberId: string; name: string; checkedInAt: string; overrideReason: OverrideReason | null }[];
+  activity: ActivityEntry[];
 }
 
 export async function getDashboard(): Promise<DashboardData> {
@@ -93,12 +110,16 @@ export async function getDashboard(): Promise<DashboardData> {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
   const nextMonthStart = addDays(`${month}-28`, 7).slice(0, 7) + "-01";
+  const prevMonthStart = addDays(monthStart, -1).slice(0, 7) + "-01";
 
   // Revenue = payments whose period starts this month (so imported history doesn't inflate it).
-  const monthSubs = await prisma.subscription.findMany({
-    where: { startDate: { gte: new Date(`${monthStart}T00:00:00Z`), lt: new Date(`${nextMonthStart}T00:00:00Z`) } },
-    select: { amount: true, paymentMethod: true },
+  const paidSince = await prisma.subscription.findMany({
+    where: { startDate: { gte: ymdToDbDate(prevMonthStart), lt: ymdToDbDate(nextMonthStart) } },
+    select: { amount: true, paymentMethod: true, startDate: true },
   });
+  const monthSubs = paidSince.filter((s) => dbDateToYmd(s.startDate) >= monthStart);
+  const prevSubs = paidSince.filter((s) => dbDateToYmd(s.startDate) < monthStart);
+
   const byMethod: Record<PaymentMethod, number> = { cash: 0, card: 0, transfer: 0 };
   for (const s of monthSubs) byMethod[s.paymentMethod] += s.amount;
 
@@ -107,12 +128,22 @@ export async function getDashboard(): Promise<DashboardData> {
     .filter((m) => m.status.kind === "active" && m.status.daysLeft <= 7)
     .map((m) => {
       const s = m.status as Extract<MemberStatus, { kind: "active" }>;
-      return { id: m.id, name: m.name, phone: m.phone, until: s.until, daysLeft: s.daysLeft };
+      return {
+        id: m.id,
+        name: m.name,
+        phone: m.phone,
+        until: s.until,
+        daysLeft: s.daysLeft,
+        // What renewing at the same price would bring in.
+        amount: m.current?.amount ?? 0,
+      };
     })
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
-  // Look back 36h and filter by local date: avoids timezone math in SQL.
-  const since = new Date(Date.now() - 36 * 60 * 60 * 1000);
+  // Look back far enough to cover today and the same weekday last week, then
+  // filter by local date: avoids timezone math in SQL.
+  const lastWeekYmd = addDays(today, -7);
+  const since = new Date(`${addDays(lastWeekYmd, -1)}T00:00:00Z`);
   const recent = await prisma.checkIn.findMany({
     where: { checkedInAt: { gte: since } },
     select: { checkedInAt: true },
@@ -127,13 +158,69 @@ export async function getDashboard(): Promise<DashboardData> {
     include: { member: { select: { name: true } } },
   });
 
+  const recentPayments = await prisma.subscription.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    include: { member: { select: { name: true } } },
+  });
+  const recentMembers = await prisma.member.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: { id: true, name: true, createdAt: true },
+  });
+
+  const activity: ActivityEntry[] = [
+    ...last20.map((c) => ({
+      id: `c-${c.id}`,
+      kind: (c.overrideReason ? "override" : "checkin") as ActivityEntry["kind"],
+      at: c.checkedInAt.toISOString(),
+      memberId: c.memberId,
+      name: c.member.name,
+      detail: c.overrideReason ? OVERRIDE_LABELS[c.overrideReason] : "Entrée validée",
+    })),
+    ...recentPayments.map((s) => ({
+      id: `s-${s.id}`,
+      kind: "payment" as const,
+      at: s.createdAt.toISOString(),
+      memberId: s.memberId,
+      name: s.member.name,
+      detail: `${s.amount} MAD · ${PAYMENT_LABELS[s.paymentMethod]} · jusqu'au ${formatDayMonth(dbDateToYmd(s.endDate))}`,
+    })),
+    ...recentMembers.map((m) => ({
+      id: `m-${m.id}`,
+      kind: "member" as const,
+      at: m.createdAt.toISOString(),
+      memberId: m.id,
+      name: m.name,
+      detail: "Nouveau membre",
+    })),
+  ]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 12);
+
+  const count = (kind: MemberStatus["kind"]) => members.filter((m) => m.status.kind === kind).length;
+
   return {
     month,
-    revenue: { total: byMethod.cash + byMethod.card + byMethod.transfer, byMethod, count: monthSubs.length },
+    revenue: {
+      total: byMethod.cash + byMethod.card + byMethod.transfer,
+      byMethod,
+      count: monthSubs.length,
+      previousTotal: prevSubs.reduce((sum, s) => sum + s.amount, 0),
+    },
     expiringSoon,
-    checkInsToday: { total: todays.length, byHour },
-    activeMembers: members.filter((m) => m.status.kind === "active").length,
-    totalMembers: members.length,
+    checkInsToday: {
+      total: todays.length,
+      byHour,
+      lastWeek: recent.filter((c) => localDate(c.checkedInAt) === lastWeekYmd).length,
+    },
+    members: {
+      total: members.length,
+      active: count("active"),
+      expired: count("expired"),
+      paused: count("paused"),
+      none: count("none"),
+    },
     recentCheckIns: last20.map((c) => ({
       id: c.id,
       memberId: c.memberId,
@@ -141,5 +228,6 @@ export async function getDashboard(): Promise<DashboardData> {
       checkedInAt: c.checkedInAt.toISOString(),
       overrideReason: c.overrideReason,
     })),
+    activity,
   };
 }

@@ -79,3 +79,21 @@ model Owner {
 
   @@map("owners")
 }
+
+/// The gym this installation serves: its name and its visual identity.
+/// The product is sold per gym, so branding is a row, never a code change.
+model Gym {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  city           String?
+  /// Data URI or public URL; shown on the reception screen and in the owner sidebar.
+  logoUrl        String?  @map("logo_url")
+  primaryColor   String   @default("#E3A008") @map("primary_color")
+  secondaryColor String   @default("#B45309") @map("secondary_color")
+  /// Text drawn on top of primaryColor.
+  onPrimaryColor String   @default("#1B1403") @map("on_primary_color")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("gyms")
+}

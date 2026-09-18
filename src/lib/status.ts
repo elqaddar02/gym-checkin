@@ -51,6 +51,42 @@ export function statusLabel(status: MemberStatus): string {
   }
 }
 
+/**
+ * How urgent a status is, independent of the gym's own colour. A membership in
+ * its last week is amber, not green: the point of the list is who to call.
+ */
+export type StatusTone = "ok" | "warn" | "stop" | "muted";
+
+/** A membership inside this many days of its end reads as attention, not valid. */
+export const WARN_DAYS = 7;
+
+export function statusTone(status: MemberStatus): StatusTone {
+  switch (status.kind) {
+    case "active":
+      return status.daysLeft <= WARN_DAYS ? "warn" : "ok";
+    case "expired":
+      return "stop";
+    case "paused":
+      return "warn";
+    case "none":
+      return "muted";
+  }
+}
+
+/** One word, for table cells and dense lists where the sentence will not fit. */
+export function statusShort(status: MemberStatus): string {
+  switch (status.kind) {
+    case "active":
+      return status.daysLeft <= WARN_DAYS ? `Expire J-${status.daysLeft}` : "Actif";
+    case "expired":
+      return "Expiré";
+    case "paused":
+      return "En pause";
+    case "none":
+      return "Sans abonnement";
+  }
+}
+
 export const STATUS_EMOJI: Record<MemberStatus["kind"], string> = {
   active: "🟢",
   expired: "🔴",

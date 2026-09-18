@@ -1,15 +1,17 @@
 import { redirect } from "next/navigation";
-import { OwnerNav } from "@/components/owner-nav";
+import { OwnerShell } from "@/components/owner-shell";
 import { getOwnerEmail } from "@/lib/auth";
+import { getBrand } from "@/lib/brand";
 
 export default async function OwnerLayout({ children }: LayoutProps<"/">) {
   const email = await getOwnerEmail();
   if (!email) redirect("/login");
 
+  const { name, city, logoUrl, initials } = await getBrand();
+
   return (
-    <div className="flex min-h-dvh flex-col bg-muted/30">
-      <OwnerNav email={email} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
-    </div>
+    <OwnerShell brand={{ name, city, logoUrl, initials }} email={email}>
+      {children}
+    </OwnerShell>
   );
 }

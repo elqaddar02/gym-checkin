@@ -4,8 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { addDays, todayYmd } from "@/lib/dates";
+import { addDays, daysBetween, todayYmd } from "@/lib/dates";
 import { PAYMENT_LABELS, STATUS_LABELS, type PaymentMethod, type SubscriptionStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export interface SubscriptionDraft {
   status: SubscriptionStatus;
@@ -39,6 +40,14 @@ export function draftToPayload(d: SubscriptionDraft) {
   };
 }
 
+/** What a Moroccan gym actually sells: the desk picks one instead of counting days. */
+const DURATIONS = [
+  { label: "1 mois", days: 30 },
+  { label: "3 mois", days: 90 },
+  { label: "6 mois", days: 180 },
+  { label: "1 an", days: 365 },
+] as const;
+
 export function SubscriptionFields({
   value,
   onChange,
@@ -51,8 +60,34 @@ export function SubscriptionFields({
   const set = <K extends keyof SubscriptionDraft>(key: K, v: SubscriptionDraft[K]) => onChange({ ...value, [key]: v });
   const id = (name: string) => `${idPrefix}-${name}`;
 
+  const spanDays = daysBetween(value.startDate, value.endDate);
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      {value.status !== "paused" && (
+        <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
+          <span className="text-muted-foreground mr-1 text-xs font-medium">Durée</span>
+          {DURATIONS.map((d) => (
+            <button
+              key={d.days}
+              type="button"
+              aria-pressed={spanDays === d.days}
+              onClick={() => set("endDate", addDays(value.startDate, d.days))}
+              className={cn(
+                "rounded-full border px-3 py-1 text-[13px] font-medium transition-colors",
+                spanDays === d.days
+                  ? "border-brand-line bg-brand-soft text-foreground font-semibold"
+                  : "bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {d.label}
+            </button>
+          ))}
+          <span className="text-muted-foreground tnum ml-auto text-xs">
+            {spanDays} jour{spanDays > 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={id("start")}>Du</Label>
         <Input id={id("start")} type="date" required value={value.startDate} onChange={(e) => set("startDate", e.target.value)} className="h-10" />

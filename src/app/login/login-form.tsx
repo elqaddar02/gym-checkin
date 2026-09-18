@@ -40,7 +40,7 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-xl">Espace propriétaire</CardTitle>
+        <CardTitle className="text-xl uppercase">Espace propriétaire</CardTitle>
         <CardDescription>Membres, paiements et tableau de bord.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -54,7 +54,7 @@ export function LoginForm() {
             <Input id="password" name="password" type="password" autoComplete="current-password" required className="h-10" />
           </div>
           {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-          <Button type="submit" className="h-10" disabled={pending}>
+          <Button type="submit" className="h-11" disabled={pending}>
             {pending ? "Connexion…" : "Se connecter"}
           </Button>
         </form>
