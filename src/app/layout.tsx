@@ -1,29 +1,46 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Barlow, Barlow_Condensed } from "next/font/google";
+import { brandVars, getBrand } from "@/lib/brand";
 import "./globals.css";
 
-const geistSans = Geist({
+// Barlow reads well at reception distance; its condensed cut carries the numbers.
+const barlow = Barlow({
   variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const barlowCondensed = Barlow_Condensed({
+  variable: "--font-display",
   subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
-export const metadata: Metadata = {
-  title: { default: "Gym", template: "%s · Gym" },
-  description: "Entrées et abonnements de la salle",
-};
+/**
+ * The gym's identity is read per request, so changing a logo or a colour shows up
+ * on the next page load instead of waiting for a rebuild.
+ */
+export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = await getBrand();
+  return {
+    title: { default: brand.name, template: `%s · ${brand.name}` },
+    description: "Entrées et abonnements de la salle",
+  };
+}
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const brand = await getBrand();
+
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The gym's identity, injected once. Every colour below is mixed from these.
+      style={brandVars(brand) as React.CSSProperties}
+      className={`${barlow.variable} ${barlowCondensed.variable} world-console h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
 }

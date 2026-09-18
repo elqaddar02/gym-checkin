@@ -1,124 +1,278 @@
+import { Banknote, CreditCard, FileDown, ArrowRightLeft, Plus, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { HourlyChart } from "@/components/hourly-chart";
+import { Module, StatTile } from "@/components/module";
+import { TrafficChart } from "@/components/traffic-chart";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDayMonth, formatTime, localDate } from "@/lib/dates";
+import { formatDayMonth, formatFullDate, formatTime, localDate, todayYmd } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
-import { getDashboard } from "@/lib/queries";
-import { OVERRIDE_LABELS, PAYMENT_LABELS, type PaymentMethod } from "@/lib/types";
+import { getDashboard, type ActivityEntry } from "@/lib/queries";
+import { PAYMENT_LABELS, type PaymentMethod } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tableau de bord" };
 
-const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const MONTHS = [
+  "janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+];
+
+const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+
+const METHOD_ICONS = { cash: Banknote, card: CreditCard, transfer: ArrowRightLeft } as const;
+
+const ACTIVITY_TAGS: Record<ActivityEntry["kind"], { label: string; className: string }> = {
+  checkin: { label: "Entrée", className: "bg-ok-soft text-ok-ink" },
+  override: { label: "Accès exceptionnel", className: "bg-stop-soft text-stop-ink" },
+  payment: { label: "Paiement", className: "bg-brand-soft text-brand-ink" },
+  member: { label: "Nouveau membre", className: "bg-muted text-muted-foreground" },
+};
 
 function mad(n: number) {
-  return `${n.toLocaleString("fr-FR")} MAD`;
+  return n.toLocaleString("fr-FR");
+}
+
+/** "+12 %" against last month, or nothing when there is no basis to compare. */
+function trend(current: number, previous: number) {
+  if (previous <= 0) return null;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return { pct, up: pct >= 0, label: `${pct >= 0 ? "+" : ""}${pct} %` };
 }
 
 export default async function DashboardPage() {
   const d = await getDashboard();
+  const today = todayYmd();
   const monthLabel = `${MONTHS[Number(d.month.slice(5, 7)) - 1]} ${d.month.slice(0, 4)}`;
+  const weekday = DAYS[new Date(`${today}T12:00:00Z`).getUTCDay()];
+
+  const revenueTrend = trend(d.revenue.total, d.revenue.previousTotal);
+  const entriesTrend = d.checkInsToday.total - d.checkInsToday.lastWeek;
+  const maxMethod = Math.max(1, ...Object.values(d.revenue.byMethod));
+  const toRecover = d.expiringSoon.reduce((sum, m) => sum + m.amount, 0);
+  const activeShare = d.members.total > 0 ? Math.round((d.members.active / d.members.total) * 100) : 0;
+  const peakHour = d.checkInsToday.byHour.indexOf(Math.max(...d.checkInsToday.byHour));
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Tableau de bord</h1>
-        <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm"><a href="/api/export?type=members">Export CSV membres</a></Button>
-          <Button asChild variant="outline" size="sm"><a href="/api/export?type=checkins">Export CSV entrées</a></Button>
+    <>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[26px] font-semibold uppercase">Tableau de bord</h1>
+          <p className="text-muted-foreground text-[13px]">
+            {weekday} {formatFullDate(today)}
+          </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <a href="/api/export?type=members">
+              <FileDown aria-hidden className="size-4" />
+              Membres
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a href="/api/export?type=checkins">
+              <FileDown aria-hidden className="size-4" />
+              Entrées
+            </a>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/members/new">
+              <Plus aria-hidden className="size-4" />
+              Membre
+            </Link>
+          </Button>
+        </div>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          accent
+          label={`Revenus · ${monthLabel}`}
+          value={mad(d.revenue.total)}
+          unit="MAD"
+          detail={
+            <>
+              {revenueTrend && (
+                <b className={cn("font-semibold", revenueTrend.up ? "text-ok-ink" : "text-stop-ink")}>
+                  {revenueTrend.label}
+                </b>
+              )}
+              {revenueTrend && " vs mois dernier · "}
+              {d.revenue.count} paiement{d.revenue.count > 1 ? "s" : ""}
+            </>
+          }
+        />
+        <StatTile
+          label="Membres actifs"
+          value={d.members.active}
+          unit={`/ ${d.members.total}`}
+          detail={`${activeShare} % de la base`}
+        />
+        <StatTile
+          label="Entrées aujourd'hui"
+          value={d.checkInsToday.total}
+          detail={
+            d.checkInsToday.lastWeek > 0 ? (
+              <>
+                <b className={cn("font-semibold", entriesTrend >= 0 ? "text-ok-ink" : "text-stop-ink")}>
+                  {entriesTrend >= 0 ? "+" : ""}
+                  {entriesTrend}
+                </b>{" "}
+                vs {weekday} dernier
+              </>
+            ) : (
+              "Première mesure de la semaine"
+            )
+          }
+        />
+        <StatTile
+          label="Expirent sous 7 j"
+          value={d.expiringSoon.length}
+          detail={
+            toRecover > 0 ? (
+              <>
+                <b className="text-warn-ink font-semibold">{mad(toRecover)} MAD</b> à relancer
+              </>
+            ) : (
+              "Rien à relancer"
+            )
+          }
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardDescription>Revenus — {monthLabel}</CardDescription>
-            <CardTitle className="text-4xl font-bold tabular-nums">{mad(d.revenue.total)}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-3 gap-3">
-              {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((m) => (
-                <div key={m} className="rounded-lg bg-muted/60 px-3 py-2">
-                  <dt className="text-xs text-muted-foreground">{PAYMENT_LABELS[m]}</dt>
-                  <dd className="text-lg font-semibold tabular-nums">{mad(d.revenue.byMethod[m])}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-2 text-xs text-muted-foreground">{d.revenue.count} paiement{d.revenue.count > 1 ? "s" : ""} dont la période commence ce mois-ci.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardDescription>Membres actifs</CardDescription>
-            <CardTitle className="text-4xl font-bold tabular-nums">{d.activeMembers}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">sur {d.totalMembers} membres</CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardDescription>Entrées aujourd&apos;hui</CardDescription>
-            <CardTitle className="text-4xl font-bold tabular-nums">{d.checkInsToday.total}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <HourlyChart byHour={d.checkInsToday.byHour} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Expirent dans 7 jours</CardTitle>
-            <CardDescription>{d.expiringSoon.length === 0 ? "Aucun" : `${d.expiringSoon.length} membre${d.expiringSoon.length > 1 ? "s" : ""}`}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y">
-              {d.expiringSoon.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{m.name}</div>
-                    <div className="text-xs text-muted-foreground tabular-nums">
-                      {formatPhone(m.phone)} · {m.daysLeft === 0 ? "expire aujourd'hui" : `le ${formatDayMonth(m.until)} (J-${m.daysLeft})`}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button asChild size="sm" variant="outline"><Link href={`/members/${m.id}?renew=1`}>Renouveler</Link></Button>
-                    <Button asChild size="sm" variant="ghost"><Link href={`/members/${m.id}`}>Modifier</Link></Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Entrées récentes</CardTitle></CardHeader>
-        <CardContent>
-          {d.recentCheckIns.length === 0 ? (
-            <p className="text-muted-foreground">Aucune entrée.</p>
-          ) : (
-            <ul className="divide-y">
-              {d.recentCheckIns.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-3 py-2 text-sm">
-                  <span>
-                    <span className="text-muted-foreground tabular-nums">{formatDayMonth(localDate(c.checkedInAt))} {formatTime(c.checkedInAt)}</span>{" "}
-                    <Link href={`/members/${c.memberId}`} className="font-medium hover:underline">{c.name}</Link>
+      <div className="grid items-start gap-3 lg:grid-cols-3">
+        <Module title="Encaissements" aside={monthLabel}>
+          <dl className="flex flex-col gap-2.5">
+            {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((m) => {
+              const Icon = METHOD_ICONS[m];
+              const amount = d.revenue.byMethod[m];
+              return (
+                <div key={m} className="grid grid-cols-[auto_1fr_auto] items-center gap-2.5 text-[13.5px]">
+                  <dt className="text-muted-foreground flex items-center gap-1.5">
+                    <Icon aria-hidden className="size-3.5" />
+                    {PAYMENT_LABELS[m]}
+                  </dt>
+                  <span aria-hidden className="bg-muted h-2 overflow-hidden rounded-full">
+                    <span
+                      className="bg-brand block h-full rounded-full"
+                      style={{ width: `${(amount / maxMethod) * 100}%` }}
+                    />
                   </span>
-                  {c.overrideReason && (
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-900 dark:bg-red-950 dark:text-red-100">
-                      Accès exceptionnel · {OVERRIDE_LABELS[c.overrideReason]}
-                    </span>
-                  )}
+                  <dd className="tnum text-right font-semibold">{mad(amount)}</dd>
+                </div>
+              );
+            })}
+          </dl>
+          <p className="text-muted-foreground text-xs">
+            Paiements dont la période commence en {MONTHS[Number(d.month.slice(5, 7)) - 1]}.
+          </p>
+        </Module>
+
+        <Module
+          title="Affluence du jour"
+          aside={
+            d.checkInsToday.total > 0 ? (
+              <span className="tnum">
+                Pic {peakHour}h · {d.checkInsToday.byHour[peakHour]}
+              </span>
+            ) : null
+          }
+        >
+          <TrafficChart byHour={d.checkInsToday.byHour} />
+        </Module>
+
+        <Module
+          title="À relancer"
+          aside={
+            d.expiringSoon.length > 0 ? <Link href="/members?filter=expiring" className="text-brand-ink font-semibold">Voir les {d.expiringSoon.length}</Link> : null
+          }
+        >
+          {d.expiringSoon.length === 0 ? (
+            <p className="text-muted-foreground py-4 text-center text-sm">
+              Aucun abonnement n&apos;expire cette semaine.
+            </p>
+          ) : (
+            <ul className="flex flex-col">
+              {d.expiringSoon.slice(0, 5).map((m) => (
+                <li key={m.id} className="flex items-center gap-2 border-t py-2 first:border-t-0 first:pt-0">
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/members/${m.id}`} className="block truncate text-sm font-semibold hover:underline">
+                      {m.name}
+                    </Link>
+                    <span className="tnum text-muted-foreground block text-xs">{formatPhone(m.phone)}</span>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-md px-2 py-0.5 text-[11.5px] font-semibold whitespace-nowrap",
+                      m.daysLeft <= 1 ? "bg-stop-soft text-stop-ink" : "bg-warn-soft text-warn-ink",
+                    )}
+                  >
+                    {m.daysLeft === 0 ? "aujourd'hui" : m.daysLeft === 1 ? "demain" : `J-${m.daysLeft} · ${formatDayMonth(m.until)}`}
+                  </span>
+                  <Button asChild size="sm" variant="outline" className="shrink-0">
+                    <Link href={`/members/${m.id}?renew=1`}>Renouveler</Link>
+                  </Button>
                 </li>
               ))}
             </ul>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </Module>
+      </div>
+
+      <Module
+        title="Activité"
+        aside={<span>Entrées, paiements et inscriptions</span>}
+        bodyClassName="gap-0"
+      >
+        {d.activity.length === 0 ? (
+          <p className="text-muted-foreground py-6 text-center text-sm">
+            Rien encore. L&apos;activité apparaîtra ici dès la première entrée.
+          </p>
+        ) : (
+          <ul className="flex flex-col">
+            {d.activity.map((a) => {
+              const tag = ACTIVITY_TAGS[a.kind];
+              const day = localDate(a.at);
+              return (
+                <li
+                  key={a.id}
+                  className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 border-t py-2.5 first:border-t-0 first:pt-0 sm:grid-cols-[76px_minmax(0,1fr)_150px_minmax(0,1.3fr)] sm:items-center"
+                >
+                  <span className="tnum text-muted-foreground text-xs">
+                    {day === today ? formatTime(a.at) : `${formatDayMonth(day)} ${formatTime(a.at)}`}
+                  </span>
+                  <Link href={`/members/${a.memberId}`} className="truncate text-sm font-semibold hover:underline">
+                    {a.name}
+                  </Link>
+                  <span className={cn("col-start-2 justify-self-start rounded-md px-2 py-0.5 text-[11.5px] font-semibold sm:col-start-auto", tag.className)}>
+                    {tag.label}
+                  </span>
+                  <span className="text-muted-foreground col-start-2 truncate text-xs sm:col-start-auto">{a.detail}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Module>
+
+      {d.members.total === 0 && (
+        <Module title="Premiers pas">
+          <p className="text-muted-foreground text-sm">
+            La salle n&apos;a pas encore de membres. Ajoutez le premier, puis ouvrez l&apos;écran
+            d&apos;accueil sur la tablette de la réception.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm">
+              <Link href="/members/new">
+                <UserPlus aria-hidden className="size-4" />
+                Ajouter un membre
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/settings/brand">Personnaliser l&apos;identité de la salle</Link>
+            </Button>
+          </div>
+        </Module>
+      )}
+    </>
   );
 }

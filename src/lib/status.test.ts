@@ -5,7 +5,9 @@ import {
   currentSubscription,
   memberStatus,
   statusLabel,
+  statusShort,
   statusSortKey,
+  statusTone,
 } from "./status";
 import type { SubscriptionStatus } from "./types";
 
@@ -243,5 +245,44 @@ describe("statusSortKey", () => {
     const longExpired = statusSortKey({ kind: "expired", since: "2020-01-01", days: 2452 });
     const expiringToday = statusSortKey({ kind: "active", until: "2026-09-18", daysLeft: 0 });
     expect(longExpired).toBeLessThan(expiringToday);
+  });
+});
+
+describe("statusShort", () => {
+  it("names the status in one word for dense lists", () => {
+    expect(statusShort(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-04-01" })], "2026-03-10"))).toBe("Actif");
+    expect(statusShort(memberStatus([sub({ startDate: "2026-02-01", endDate: "2026-03-01" })], "2026-03-10"))).toBe("Expiré");
+    expect(
+      statusShort(memberStatus([sub({ status: "paused", startDate: "2026-03-01", endDate: "2026-04-01" })], "2026-03-10")),
+    ).toBe("En pause");
+    expect(statusShort(memberStatus([], "2026-03-10"))).toBe("Sans abonnement");
+  });
+
+  it("counts down the last week, because that is the week to act on", () => {
+    expect(statusShort(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-03-13" })], "2026-03-10"))).toBe("Expire J-3");
+    expect(statusShort(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-03-17" })], "2026-03-10"))).toBe("Expire J-7");
+    expect(statusShort(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-03-18" })], "2026-03-10"))).toBe("Actif");
+  });
+});
+
+describe("statusTone", () => {
+  it("turns a membership amber in its last week, before it expires", () => {
+    expect(statusTone(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-03-18" })], "2026-03-10"))).toBe("ok");
+    expect(statusTone(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-03-17" })], "2026-03-10"))).toBe(
+      "warn",
+    );
+    expect(statusTone(memberStatus([sub({ startDate: "2026-03-01", endDate: "2026-03-10" })], "2026-03-10"))).toBe(
+      "warn",
+    );
+  });
+
+  it("keeps the other kinds on their own tone", () => {
+    expect(statusTone(memberStatus([sub({ startDate: "2026-02-01", endDate: "2026-03-01" })], "2026-03-10"))).toBe(
+      "stop",
+    );
+    expect(
+      statusTone(memberStatus([sub({ status: "paused", startDate: "2026-03-01", endDate: "2026-04-01" })], "2026-03-10")),
+    ).toBe("warn");
+    expect(statusTone(memberStatus([], "2026-03-10"))).toBe("muted");
   });
 });
