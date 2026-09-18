@@ -4,33 +4,51 @@ import { getServerSession, type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { NextResponse } from "next/server";
 import { prisma } from "./prisma";
+import { normalizeUsername } from "./username";
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: "/login" },
   providers: [
     CredentialsProvider({
-      name: "Email",
+      name: "Identifiant",
       credentials: {
-        email: { label: "Email", type: "email" },
+        username: { label: "Identifiant", type: "text" },
         password: { label: "Mot de passe", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email?.trim().toLowerCase();
+        const username = normalizeUsername(credentials?.username ?? "");
         const password = credentials?.password;
-        if (!email || !password) return null;
+        if (!username || !password) return null;
 
-        const owner = await prisma.owner.findUnique({ where: { email } });
+        // The email is still accepted: an owner who had the account before
+        // identifiants existed should not be locked out by the change.
+        const owner = await prisma.owner.findFirst({
+          where: { OR: [{ username }, { email: username }] },
+        });
         if (!owner || !(await bcrypt.compare(password, owner.passwordHash))) return null;
-        return { id: owner.id, email: owner.email };
+        return { id: owner.id, email: owner.email, name: owner.username };
       },
     }),
   ],
 };
 
-export async function getOwnerEmail(): Promise<string | null> {
+export interface OwnerSession {
+  /** What the owner signs in with, and what the app calls them. */
+  username: string;
+  email: string;
+}
+
+export async function getOwnerSession(): Promise<OwnerSession | null> {
   const session = await getServerSession(authOptions);
-  return session?.user?.email ?? null;
+  const email = session?.user?.email;
+  if (!email) return null;
+  // Sessions issued before identifiants existed carry no name.
+  return { username: session.user?.name || email, email };
+}
+
+export async function getOwnerEmail(): Promise<string | null> {
+  return (await getOwnerSession())?.email ?? null;
 }
 
 /** For API routes: returns the owner email, or a 401 response to return as-is. */

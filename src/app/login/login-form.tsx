@@ -24,13 +24,13 @@ export function LoginForm() {
     setPending(true);
     setError(null);
     const res = await signIn("credentials", {
-      email: String(form.get("email") ?? ""),
+      username: String(form.get("username") ?? ""),
       password: String(form.get("password") ?? ""),
       redirect: false,
     });
     setPending(false);
     if (!res || res.error) {
-      setError(res?.status === 401 || res?.error === "CredentialsSignin" ? "Email ou mot de passe incorrect" : "Connexion impossible. Vérifiez Internet.");
+      setError(res?.status === 401 || res?.error === "CredentialsSignin" ? "Identifiant ou mot de passe incorrect" : "Connexion impossible. Vérifiez Internet.");
       return;
     }
     router.replace(safeCallback(params.get("callbackUrl")));
@@ -46,8 +46,21 @@ export function LoginForm() {
       <CardContent>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="username" required autoFocus className="h-10" />
+            <Label htmlFor="username">Identifiant</Label>
+            {/* autoCapitalize/autoCorrect off: a tablet keyboard would otherwise
+                capitalise the first letter of the identifiant. */}
+            <Input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              autoFocus
+              className="h-10"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="password">Mot de passe</Label>

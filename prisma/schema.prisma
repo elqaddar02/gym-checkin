@@ -73,6 +73,10 @@ model CheckIn {
 
 model Owner {
   id           String   @id @default(uuid()) @db.Uuid
+  /// What the owner types to sign in. Lowercase; see src/lib/username.ts.
+  username     String   @unique
+  /// Kept for contacting the owner, and as the only way back in if the
+  /// identifiant is forgotten. Signing in with it still works.
   email        String   @unique
   passwordHash String   @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at")
