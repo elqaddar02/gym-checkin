@@ -29,11 +29,11 @@ const SECTIONS = [
 
 export function OwnerShell({
   brand,
-  email,
+  owner,
   children,
 }: {
   brand: Pick<Brand, "name" | "city" | "logoUrl" | "initials">;
-  email: string;
+  owner: { username: string; email: string };
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -92,8 +92,8 @@ export function OwnerShell({
         </nav>
 
         <div className="mt-auto hidden border-t pt-3 md:block">
-          <p className="text-muted-foreground truncate text-xs" title={email}>
-            {email}
+          <p className="text-muted-foreground truncate text-xs" title={owner.email}>
+            {owner.username}
           </p>
           <button
             type="button"

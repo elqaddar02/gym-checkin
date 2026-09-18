@@ -15,7 +15,7 @@ Next.js 16 · Prisma 7 / Postgres · NextAuth (credentials) · shadcn/ui.
 npm install
 cp .env.example .env        # then fill DATABASE_URL and NEXTAUTH_SECRET
 npm run db:migrate          # creates tables (and the database if missing)
-npm run owner -- owner@example.com "a-long-password"
+npm run owner -- mouad owner@example.com "a-long-password"
 npm run dev
 ```
 
@@ -44,6 +44,10 @@ The service worker (`public/sw.js`) is only registered in production builds.
 To test offline locally: `npm run build && npm start`, open `/checkin` once online,
 then go offline in DevTools and reload.
 
+**Owner sign-in** uses the identifiant (3-32 characters, lowercase) set by
+`npm run owner`. The email on the account still works as a sign-in, and is there
+so the owner can be reached if they forget the identifiant.
+
 **Revenue** on the dashboard = subscriptions whose period *starts* in the current month.
 
 ## Deploy (Vercel)
@@ -51,5 +55,5 @@ then go offline in DevTools and reload.
 1. Create a Postgres database (Neon / Vercel Postgres); set `DATABASE_URL`,
    `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `NEXT_PUBLIC_GYM_TZ` in the project.
 2. Run migrations against it: `npm run db:deploy`.
-3. Create the owner: `npm run owner -- email "password"` (with production `DATABASE_URL`).
+3. Create the owner: `npm run owner -- <identifiant> <email> "<password>"` (with production `DATABASE_URL`).
 4. On the reception tablet, open `/checkin` once while online and "Add to Home Screen".
