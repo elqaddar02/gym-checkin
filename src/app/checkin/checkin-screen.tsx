@@ -1,22 +1,11 @@
 "use client";
 
-import { Check, Delete, Wifi, WifiOff, X } from "lucide-react";
+import { Check, Delete, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { requestBackgroundSync } from "@/components/service-worker";
-import { StatusBadge } from "@/components/status-badge";
-import { TrafficChart } from "@/components/traffic-chart";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { initialsOf, type Brand } from "@/lib/brand-format";
-import { formatDayMonth, formatTime, localDate, localHour, todayYmd } from "@/lib/dates";
+import { formatDayMonth, formatTime, localDate, todayYmd } from "@/lib/dates";
 import {
   enqueueCheckIn,
   flushQueue,
@@ -27,29 +16,41 @@ import {
   type QueuedCheckIn,
 } from "@/lib/offline-db";
 import { formatPhone, phoneQueryDigits, phoneSearchKey } from "@/lib/phone";
-import { memberStatus, type MemberStatus } from "@/lib/status";
+import { memberStatus, statusShort, statusTone, type MemberStatus, type StatusTone } from "@/lib/status";
 import { OVERRIDE_LABELS, type OverrideReason, type ReceptionMember } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const MAX_RESULTS = 8;
-const FLASH_MS = 3000;
+const MAX_RESULTS = 6;
+const FLASH_MS = 2500;
 const SYNC_INTERVAL_MS = 15_000;
 const MEMBERS_REFRESH_MS = 2 * 60_000;
-/** How far ahead the renewal rail looks, in days. */
-const RENEWAL_HORIZON = 7;
 
 type Flash =
   | { kind: "ok"; name: string; time: string; override: boolean }
   | { kind: "error"; message: string };
 
-interface RecentEntry {
-  id: string;
-  name: string;
-  checkedInAt: string;
-  overrideReason: OverrideReason | null;
-  state: "syncing" | "synced" | "rejected";
-  error?: string;
-}
+const TONE_DOT: Record<StatusTone, string> = {
+  ok: "bg-ok",
+  warn: "bg-warn",
+  stop: "bg-stop",
+  muted: "bg-muted-foreground",
+};
+
+const TONE_TEXT: Record<StatusTone, string> = {
+  ok: "text-ok-ink",
+  warn: "text-warn-ink",
+  stop: "text-stop-ink",
+  muted: "text-muted-foreground",
+};
+
+const TONE_PANEL: Record<StatusTone, string> = {
+  ok: "bg-ok-soft text-ok-ink",
+  warn: "bg-warn-soft text-warn-ink",
+  stop: "bg-stop-soft text-stop-ink",
+  muted: "bg-muted text-muted-foreground",
+};
+
+const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 function fold(s: string) {
   return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -73,6 +74,26 @@ function canOverride(status: MemberStatus) {
   return status.kind === "expired" || status.kind === "paused";
 }
 
+/** The one sentence the receptionist reads before letting someone in. */
+function statusHeadline(status: MemberStatus): { title: string; detail: string } {
+  switch (status.kind) {
+    case "active":
+      return {
+        title: "Abonnement valide",
+        detail: `Jusqu'au ${formatDayMonth(status.until)} · ${status.daysLeft} jour${status.daysLeft > 1 ? "s" : ""}`,
+      };
+    case "expired":
+      return {
+        title: "Abonnement expiré",
+        detail: status.days === 0 ? "Aujourd'hui" : `Depuis ${status.days} jour${status.days > 1 ? "s" : ""}`,
+      };
+    case "paused":
+      return { title: "Abonnement en pause", detail: `Retour le ${formatDayMonth(status.until)}` };
+    case "none":
+      return { title: "Aucun abonnement", detail: "Voir le propriétaire" };
+  }
+}
+
 export function CheckinScreen({
   brand,
 }: {
@@ -83,12 +104,10 @@ export function CheckinScreen({
   const [loaded, setLoaded] = useState(false);
   const [online, setOnline] = useState(true);
   const [queue, setQueue] = useState<QueuedCheckIn[]>([]);
-  const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flash, setFlash] = useState<Flash | null>(null);
   const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overrideReason, setOverrideReason] = useState<OverrideReason | null>(null);
   const [busy, setBusy] = useState(false);
   const [today, setToday] = useState(todayYmd);
   const [now, setNow] = useState(() => Date.now());
@@ -102,6 +121,18 @@ export function CheckinScreen({
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
+  const showFlash = useCallback((f: Flash) => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash(f);
+    flashTimer.current = setTimeout(() => setFlash(null), f.kind === "ok" ? FLASH_MS : 8000);
+  }, []);
+
+  const dismissFlash = useCallback(() => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash(null);
+    focusSearch();
+  }, [focusSearch]);
+
   // ---- data loading & sync -------------------------------------------------
 
   const refreshQueue = useCallback(async () => {
@@ -113,27 +144,14 @@ export function CheckinScreen({
     if (outcome.offline) setOnline(false);
     else if (outcome.synced.length > 0 || outcome.rejected.length > 0) setOnline(true);
 
-    if (outcome.synced.length > 0 || outcome.rejected.length > 0) {
-      const synced = new Set(outcome.synced);
-      const rejected = new Map(outcome.rejected.map((r) => [r.id, r.error]));
-      setRecent((prev) =>
-        prev.map((r) =>
-          synced.has(r.id)
-            ? { ...r, state: "synced" }
-            : rejected.has(r.id)
-              ? { ...r, state: "rejected", error: rejected.get(r.id) }
-              : r,
-        ),
-      );
-      if (outcome.rejected.length > 0) {
-        setFlash({
-          kind: "error",
-          message: `Entrée refusée par le serveur: ${outcome.rejected.map((r) => `${r.name} (${r.error})`).join(", ")}`,
-        });
-      }
+    if (outcome.rejected.length > 0) {
+      showFlash({
+        kind: "error",
+        message: `Entrée refusée par le serveur: ${outcome.rejected.map((r) => `${r.name} (${r.error})`).join(", ")}`,
+      });
     }
     await refreshQueue();
-  }, [refreshQueue]);
+  }, [refreshQueue, showFlash]);
 
   const refreshMembers = useCallback(async () => {
     try {
@@ -261,53 +279,19 @@ export function CheckinScreen({
     [members, queue, today],
   );
 
-  /**
-   * Who came in today, from the tablet's own cache. It counts members, not
-   * entries, so a second visit by the same person doesn't move it — which is
-   * what "combien de personnes sont passées" means at the desk.
-   */
-  const attendance = useMemo(() => {
-    const byHour = Array.from({ length: 24 }, () => 0);
-    let total = 0;
-    for (const m of members) {
-      if (m.lastCheckInAt && localDate(m.lastCheckInAt) === today) {
-        byHour[localHour(m.lastCheckInAt)]++;
-        total++;
-      }
-    }
-    return { total, byHour };
-  }, [members, today]);
-
-  /** Subscriptions running out this week: the receptionist can warn them at the door. */
-  const renewals = useMemo(
-    () =>
-      members
-        .map((m) => ({ member: m, status: statuses.get(m.id)! }))
-        .filter((r) => r.status.kind === "active" && r.status.daysLeft <= RENEWAL_HORIZON)
-        .sort(
-          (a, b) =>
-            (a.status as Extract<MemberStatus, { kind: "active" }>).daysLeft -
-            (b.status as Extract<MemberStatus, { kind: "active" }>).daysLeft,
-        )
-        .slice(0, 5),
-    [members, statuses],
-  );
-
   // ---- actions -------------------------------------------------------------
-
-  const showFlash = useCallback((f: Flash) => {
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    setFlash(f);
-    flashTimer.current = setTimeout(() => setFlash(null), f.kind === "ok" ? FLASH_MS : 8000);
-  }, []);
 
   const reset = useCallback(() => {
     setQuery("");
     setSelectedId(null);
     setOverrideOpen(false);
-    setOverrideReason(null);
     focusSearch();
   }, [focusSearch]);
+
+  const select = useCallback((id: string) => {
+    setSelectedId(id);
+    setOverrideOpen(false);
+  }, []);
 
   const doCheckIn = useCallback(
     async (member: ReceptionMember, reason: OverrideReason | null) => {
@@ -333,12 +317,6 @@ export function CheckinScreen({
       }
 
       setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, lastCheckInAt: item.checkedInAt } : m)));
-      setRecent((prev) =>
-        [
-          { id: item.id, name: member.name, checkedInAt: item.checkedInAt, overrideReason: reason, state: "syncing" as const },
-          ...prev,
-        ].slice(0, 30),
-      );
       showFlash({ kind: "ok", name: member.name, time: formatTime(item.checkedInAt), override: reason !== null });
       reset();
       setBusy(false);
@@ -360,7 +338,7 @@ export function CheckinScreen({
     if (selected && selectedStatus && canCheckIn(selectedStatus)) {
       void doCheckIn(selected, null);
     } else if (!selected && results.length === 1) {
-      setSelectedId(results[0].id);
+      select(results[0].id);
     }
   };
 
@@ -368,6 +346,7 @@ export function CheckinScreen({
   const press = useCallback(
     (key: string) => {
       setSelectedId(null);
+      setOverrideOpen(false);
       setQuery((q) => (key === "back" ? q.slice(0, -1) : key === "clear" ? "" : q + key));
       focusSearch();
     },
@@ -379,51 +358,49 @@ export function CheckinScreen({
   const pendingCount = queue.length;
   const staleCache = fetchedAt ? now - new Date(fetchedAt).getTime() > 24 * 60 * 60 * 1000 : false;
   const alreadyToday = selected ? lastCheckInToday(selected.id) : null;
-  const todayRecent = recent.filter((r) => localDate(r.checkedInAt) === today);
+
+  const connection: { tone: StatusTone; label: string } = !online
+    ? { tone: "stop", label: "Hors ligne" }
+    : staleCache
+      ? { tone: "warn", label: "Liste non à jour" }
+      : { tone: "ok", label: "En ligne" };
 
   return (
-    <div className="world-tablet dark bg-background text-foreground flex min-h-dvh flex-col gap-4 px-4 py-4 sm:px-5">
-      <header className="flex flex-wrap items-center gap-3">
-        <BrandMark brand={brand} size="lg" />
+    <div className="world-tablet dark bg-background text-foreground relative flex min-h-dvh flex-col overflow-hidden">
+      {/* A soft wash of the gym's colour behind everything. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-40 h-[28rem] opacity-25 blur-3xl"
+        style={{ background: "radial-gradient(50% 60% at 50% 0%, var(--brand), transparent 70%)" }}
+      />
+
+      <header className="relative flex items-center gap-3 px-5 pt-5 sm:px-8">
+        <BrandMark brand={brand} size="md" />
         <div className="min-w-0">
-          <h1 className="truncate text-[22px] leading-tight font-semibold uppercase">{brand.name}</h1>
-          <p className="text-muted-foreground truncate text-xs tracking-wider uppercase">
-            {brand.city ? `${brand.city} · Accueil` : "Accueil"}
-          </p>
+          <h1 className="truncate text-lg leading-tight font-semibold">{brand.name}</h1>
+          {brand.city && <p className="text-muted-foreground truncate text-sm">{brand.city}</p>}
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {pendingCount > 0 && (
-            <span className="bg-warn-soft text-warn-ink inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold">
-              <span className="bg-warn size-2 animate-pulse rounded-full" />
-              {pendingCount} en attente
-            </span>
-          )}
+        <div className="ml-auto flex items-center gap-4">
           <span
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold",
-              online ? "bg-ok-soft text-ok-ink" : "bg-stop-soft text-stop-ink",
-            )}
+            className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm font-medium"
+            title={pendingCount > 0 ? `${pendingCount} entrée(s) en attente d'envoi` : undefined}
           >
-            {online ? <Wifi aria-hidden className="size-4" /> : <WifiOff aria-hidden className="size-4" />}
-            {online ? "En ligne" : "Hors ligne"}
+            <span className={cn("size-2 rounded-full", TONE_DOT[connection.tone])} />
+            {connection.label}
+            {pendingCount > 0 && <span className="text-warn-ink tnum">· {pendingCount}</span>}
           </span>
-          <span className="font-display tnum text-3xl font-semibold" suppressHydrationWarning>
+          <span className="font-display tnum text-3xl font-semibold tracking-tight" suppressHydrationWarning>
             {clock ?? "--:--"}
           </span>
         </div>
       </header>
 
-      {staleCache && (
-        <p className="bg-warn-soft text-warn-ink rounded-lg px-4 py-2.5 text-sm font-medium">
-          Liste des membres non mise à jour depuis plus de 24 h — les statuts peuvent être anciens.
-        </p>
-      )}
-
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        {/* ---- search, keypad and the member being served ---- */}
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className="relative">
+      <main className="relative mx-auto grid w-full max-w-5xl flex-1 content-center gap-6 px-5 py-6 sm:px-8 lg:grid-cols-2 lg:gap-10">
+        {/* ---- what is typed, and the keypad to type it ---- */}
+        <div className={cn("flex flex-col gap-4", selected && "max-lg:hidden")}>
+          <label className="group flex h-20 items-center gap-4 rounded-3xl border border-white/[0.08] bg-white/[0.04] px-6 transition-colors focus-within:border-[var(--brand)] focus-within:bg-white/[0.06]">
+            <Search aria-hidden className="text-muted-foreground size-6 shrink-0" />
             <input
               ref={inputRef}
               autoFocus
@@ -435,291 +412,279 @@ export function CheckinScreen({
               onChange={(e) => {
                 setQuery(e.target.value);
                 setSelectedId(null);
+                setOverrideOpen(false);
               }}
               onKeyDown={onKeyDown}
-              placeholder="Téléphone ou nom…"
+              placeholder="Téléphone ou nom"
               aria-label="Rechercher un membre par téléphone ou nom"
-              className="border-brand-line ring-brand-soft bg-card placeholder:text-muted-foreground font-display tnum h-20 w-full rounded-2xl border-2 px-6 text-3xl tracking-[0.08em] ring-4 outline-none focus:border-[var(--brand)]"
+              className="placeholder:text-muted-foreground/60 font-display tnum w-full min-w-0 bg-transparent text-3xl font-semibold tracking-wide outline-none [&::-webkit-search-cancel-button]:hidden"
             />
+          </label>
+
+          <div className="grid grid-cols-3 gap-3" role="group" aria-label="Pavé numérique">
+            {KEYS.map((k) => (
+              <Key key={k} onClick={() => press(k)}>
+                {k}
+              </Key>
+            ))}
+            <Key onClick={() => press("clear")} label="Tout effacer" muted>
+              <X aria-hidden className="size-6" />
+            </Key>
+            <Key onClick={() => press("0")}>0</Key>
+            <Key onClick={() => press("back")} label="Effacer le dernier chiffre" muted>
+              <Delete aria-hidden className="size-6" />
+            </Key>
           </div>
-
-          {flash && (
-            <div
-              role="status"
-              aria-live="assertive"
-              className={cn(
-                "rounded-2xl px-6 py-5 text-center",
-                flash.kind === "ok" ? "brand-fill" : "bg-stop text-white",
-              )}
-            >
-              {flash.kind === "ok" ? (
-                <>
-                  <div className="font-display tnum flex items-center justify-center gap-3 text-4xl font-bold uppercase">
-                    <Check aria-hidden className="size-9" strokeWidth={3} />
-                    Entré {flash.time}
-                  </div>
-                  <div className="mt-1 text-lg font-medium opacity-90">
-                    {flash.name}
-                    {flash.override && " · accès exceptionnel"}
-                  </div>
-                </>
-              ) : (
-                <div className="text-lg font-medium">{flash.message}</div>
-              )}
-            </div>
-          )}
-
-          {!selected && query.trim() !== "" && (
-            <ul className="flex flex-col gap-2" aria-label="Résultats">
-              {results.length === 0 && (
-                <li className="text-muted-foreground rounded-xl border border-dashed px-5 py-6 text-center text-lg">
-                  {loaded && members.length === 0
-                    ? "Aucun membre en cache. Connectez-vous à Internet une fois."
-                    : "Aucun membre trouvé"}
-                </li>
-              )}
-              {results.map((m) => (
-                <li key={m.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(m.id)}
-                    className="bg-card hover:bg-muted active:bg-muted flex w-full items-center justify-between gap-4 rounded-xl border px-5 py-4 text-left transition-colors"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-xl font-semibold">{m.name}</span>
-                      <span className="text-muted-foreground tnum block text-base">{formatPhone(m.phone)}</span>
-                    </span>
-                    <StatusBadge status={statuses.get(m.id)!} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {selected && selectedStatus && (
-            <section className="bg-card flex flex-col gap-4 rounded-2xl border p-5" aria-label="Membre sélectionné">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span
-                    aria-hidden
-                    className="bg-brand-soft border-brand-line text-brand-ink font-display grid size-14 shrink-0 place-items-center rounded-[14px] border text-[22px] font-bold"
-                  >
-                    {initialsOf(selected.name)}
-                  </span>
-                  <div className="min-w-0">
-                    <h2 className="truncate text-3xl font-bold uppercase">{selected.name}</h2>
-                    <p className="text-muted-foreground tnum text-lg">{formatPhone(selected.phone)}</p>
-                  </div>
-                </div>
-                <StatusBadge status={selectedStatus} size="lg" />
-              </div>
-
-              {selectedStatus.kind === "active" && (
-                <div>
-                  <span aria-hidden className="bg-muted block h-2 overflow-hidden rounded-full">
-                    <span
-                      className="brand-fill block h-full rounded-full"
-                      style={{ width: `${Math.max(4, Math.min(100, (selectedStatus.daysLeft / 30) * 100))}%` }}
-                    />
-                  </span>
-                  <p className="text-muted-foreground tnum mt-1.5 text-sm">
-                    Valable jusqu&apos;au {formatDayMonth(selectedStatus.until)} · {selectedStatus.daysLeft} jour
-                    {selectedStatus.daysLeft > 1 ? "s" : ""} restant{selectedStatus.daysLeft > 1 ? "s" : ""}
-                  </p>
-                </div>
-              )}
-
-              {selected.notes && (
-                <p className="bg-muted border-brand-line rounded-r-lg border-l-[3px] px-4 py-3 text-base">
-                  {selected.notes}
-                </p>
-              )}
-
-              {alreadyToday && (
-                <p className="bg-warn-soft text-warn-ink rounded-lg px-4 py-3 text-xl font-semibold">
-                  Déjà entré à {formatTime(alreadyToday)}
-                </p>
-              )}
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                {canCheckIn(selectedStatus) && (
-                  <Button
-                    className="h-16 flex-1 rounded-xl text-2xl font-semibold uppercase"
-                    disabled={busy}
-                    onClick={() => void doCheckIn(selected, null)}
-                  >
-                    <Check aria-hidden className="size-7" strokeWidth={3} />
-                    Entrée
-                  </Button>
-                )}
-                {canOverride(selectedStatus) && (
-                  <Button
-                    variant="destructive"
-                    className="h-16 flex-1 rounded-xl text-2xl font-semibold uppercase"
-                    disabled={busy}
-                    onClick={() => setOverrideOpen(true)}
-                  >
-                    Laisser entrer
-                  </Button>
-                )}
-                {selectedStatus.kind === "none" && (
-                  <p className="bg-muted flex-1 rounded-xl px-4 py-4 text-center text-lg">
-                    Aucun abonnement — voir le propriétaire.
-                  </p>
-                )}
-                <Button variant="outline" className="h-16 rounded-xl px-8 text-xl uppercase" onClick={reset}>
-                  <X aria-hidden className="size-6" />
-                  Annuler
-                </Button>
-              </div>
-            </section>
-          )}
-
-          {!selected && (
-            <div className="grid max-w-md grid-cols-3 gap-2" role="group" aria-label="Pavé numérique">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => press(k)}
-                  className="bg-secondary hover:bg-muted font-display grid h-14 place-items-center rounded-xl border text-2xl font-semibold transition-colors"
-                >
-                  {k}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => press("clear")}
-                className="bg-secondary hover:bg-muted text-muted-foreground grid h-14 place-items-center rounded-xl border text-sm font-semibold uppercase transition-colors"
-              >
-                Effacer
-              </button>
-              <button
-                type="button"
-                onClick={() => press("0")}
-                className="bg-secondary hover:bg-muted font-display grid h-14 place-items-center rounded-xl border text-2xl font-semibold transition-colors"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={() => press("back")}
-                aria-label="Effacer le dernier chiffre"
-                className="bg-secondary hover:bg-muted text-muted-foreground grid h-14 place-items-center rounded-xl border transition-colors"
-              >
-                <Delete aria-hidden className="size-6" />
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* ---- the rail: what the desk needs at a glance ---- */}
-        <aside className="flex min-w-0 flex-col gap-4">
-          <section className="bg-card flex flex-col gap-1 rounded-2xl border p-4">
-            <span className="eyebrow">Membres entrés aujourd&apos;hui</span>
-            <span className="font-display tnum text-brand text-5xl leading-none font-bold">{attendance.total}</span>
-            <div className="mt-2">
-              <TrafficChart byHour={attendance.byHour} height="h-14" />
-            </div>
-          </section>
-
-          <section className="bg-card flex flex-col gap-2 rounded-2xl border p-4">
-            <h2 className="eyebrow">Dernières entrées (cet appareil)</h2>
-            {todayRecent.length === 0 ? (
-              <p className="text-muted-foreground py-2 text-sm">Aucune entrée enregistrée sur cette tablette.</p>
-            ) : (
-              <ul className="flex flex-col">
-                {todayRecent.slice(0, 6).map((r) => (
-                  <li key={r.id} className="flex items-center gap-2.5 border-t py-2 text-sm first:border-t-0 first:pt-0">
-                    <span className="tnum text-muted-foreground text-xs">{formatTime(r.checkedInAt)}</span>
-                    <span className="min-w-0 flex-1 truncate font-medium">
-                      {r.name}
-                      {r.overrideReason && (
-                        <span className="text-stop-ink text-xs"> · {OVERRIDE_LABELS[r.overrideReason]}</span>
-                      )}
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 text-xs",
-                        r.state === "synced" && "text-ok-ink",
-                        r.state === "syncing" && "text-warn-ink",
-                        r.state === "rejected" && "text-stop-ink",
-                      )}
-                    >
-                      {r.state === "synced" ? "enregistré" : r.state === "syncing" ? "envoi…" : r.error}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {renewals.length > 0 && (
-            <section className="bg-card flex flex-col gap-2 rounded-2xl border p-4">
-              <h2 className="eyebrow">À renouveler cette semaine</h2>
-              <ul className="flex flex-col">
-                {renewals.map(({ member, status }) => (
-                  <li key={member.id} className="flex items-center gap-2 border-t py-2 text-sm first:border-t-0 first:pt-0">
-                    <span className="min-w-0 flex-1 truncate font-medium">{member.name}</span>
-                    <StatusBadge status={status} size="sm" short />
-                  </li>
-                ))}
-              </ul>
-            </section>
+        {/* ---- who was found ---- */}
+        <section
+          className={cn(
+            "flex flex-col rounded-3xl border border-white/[0.08] bg-white/[0.03] p-3 backdrop-blur lg:min-h-[22rem]",
+            // On a narrow screen the keypad alone says what to do.
+            !selected && query.trim() === "" && "max-lg:hidden",
           )}
-        </aside>
+          aria-live="polite"
+        >
+          {selected && selectedStatus ? (
+            <MemberCard
+              member={selected}
+              status={selectedStatus}
+              alreadyToday={alreadyToday}
+              busy={busy}
+              overrideOpen={overrideOpen}
+              onCheckIn={(reason) => void doCheckIn(selected, reason)}
+              onOverride={() => setOverrideOpen(true)}
+              onCancel={reset}
+            />
+          ) : query.trim() === "" ? (
+            <Placeholder title="Qui entre ?" detail="Tapez le numéro de téléphone du membre, ou son nom." />
+          ) : results.length === 0 ? (
+            <Placeholder
+              title="Aucun membre trouvé"
+              detail={
+                loaded && members.length === 0
+                  ? "La liste des membres n'est pas encore chargée. Connectez la tablette à Internet."
+                  : "Vérifiez le numéro."
+              }
+            />
+          ) : (
+            <ul className="flex flex-col gap-1" aria-label="Résultats">
+              {results.map((m) => {
+                const status = statuses.get(m.id)!;
+                const tone = statusTone(status);
+                return (
+                  <li key={m.id}>
+                    <button
+                      type="button"
+                      onClick={() => select(m.id)}
+                      className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.05] active:bg-white/[0.08]"
+                    >
+                      <Avatar name={m.name} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-lg font-semibold">{m.name}</span>
+                        <span className="text-muted-foreground tnum block text-sm">{formatPhone(m.phone)}</span>
+                      </span>
+                      <span className={cn("flex shrink-0 items-center gap-2 text-sm font-medium", TONE_TEXT[tone])}>
+                        <span className={cn("size-2 rounded-full", TONE_DOT[tone])} />
+                        {statusShort(status)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </main>
+
+      {flash && <FlashOverlay flash={flash} onDismiss={dismissFlash} />}
+    </div>
+  );
+}
+
+function Key({
+  children,
+  onClick,
+  label,
+  muted = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  label?: string;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        "font-display grid h-[4.5rem] place-items-center rounded-2xl text-3xl font-semibold transition-all select-none",
+        "bg-white/[0.05] hover:bg-white/[0.09] active:scale-95 active:bg-white/[0.12]",
+        muted && "text-muted-foreground bg-transparent",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Avatar({ name, large = false }: { name: string; large?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "bg-brand-soft text-brand-ink font-display grid shrink-0 place-items-center rounded-full font-bold",
+        large ? "size-20 text-3xl" : "size-11 text-base",
+      )}
+    >
+      {initialsOf(name)}
+    </span>
+  );
+}
+
+function Placeholder({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+      <span className="grid size-16 place-items-center rounded-full bg-white/[0.05]">
+        <Search aria-hidden className="text-muted-foreground size-7" />
+      </span>
+      <p className="text-xl font-semibold">{title}</p>
+      <p className="text-muted-foreground max-w-xs">{detail}</p>
+    </div>
+  );
+}
+
+function MemberCard({
+  member,
+  status,
+  alreadyToday,
+  busy,
+  overrideOpen,
+  onCheckIn,
+  onOverride,
+  onCancel,
+}: {
+  member: ReceptionMember;
+  status: MemberStatus;
+  alreadyToday: string | null;
+  busy: boolean;
+  overrideOpen: boolean;
+  onCheckIn: (reason: OverrideReason | null) => void;
+  onOverride: () => void;
+  onCancel: () => void;
+}) {
+  const tone = statusTone(status);
+  const headline = statusHeadline(status);
+
+  return (
+    <div className="flex flex-1 flex-col gap-5 p-3" aria-label="Membre sélectionné">
+      <div className="flex items-start gap-4">
+        <Avatar name={member.name} large />
+        <div className="min-w-0 flex-1 pt-1">
+          <h2 className="truncate text-3xl font-bold tracking-tight">{member.name}</h2>
+          <p className="text-muted-foreground tnum text-lg">{formatPhone(member.phone)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Annuler"
+          className="text-muted-foreground grid size-11 shrink-0 place-items-center rounded-full transition-colors hover:bg-white/[0.08]"
+        >
+          <X aria-hidden className="size-6" />
+        </button>
       </div>
 
-      <Dialog
-        open={overrideOpen}
-        onOpenChange={(open) => {
-          setOverrideOpen(open);
-          if (!open) setOverrideReason(null);
-        }}
-      >
-        {/* The dialog renders in a portal outside this screen, so it carries the world with it. */}
-        <DialogContent className="world-tablet dark bg-card text-foreground sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-2xl uppercase">Laisser entrer {selected?.name}</DialogTitle>
-            <DialogDescription className="text-base">
-              {selectedStatus &&
-                selectedStatus.kind !== "active" &&
-                "L'abonnement n'est pas valide. Choisissez la raison :"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2" role="radiogroup" aria-label="Raison">
-            {(Object.keys(OVERRIDE_LABELS) as OverrideReason[]).map((reason) => (
-              <button
-                key={reason}
-                type="button"
-                role="radio"
-                aria-checked={overrideReason === reason}
-                onClick={() => setOverrideReason(reason)}
-                className={cn(
-                  "rounded-xl border-2 px-5 py-4 text-left text-xl transition-colors",
-                  overrideReason === reason
-                    ? "border-brand-line bg-brand-soft font-semibold"
-                    : "hover:bg-muted border-border",
-                )}
-              >
-                {OVERRIDE_LABELS[reason]}
-              </button>
-            ))}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="h-14 text-lg" onClick={() => setOverrideOpen(false)}>
-              Annuler
-            </Button>
-            <Button
-              className="h-14 text-lg"
-              disabled={!overrideReason || busy || !selected}
-              onClick={() => selected && overrideReason && void doCheckIn(selected, overrideReason)}
+      <div className={cn("flex items-center gap-3 rounded-2xl px-5 py-4", TONE_PANEL[tone])}>
+        <span className={cn("size-3 shrink-0 rounded-full", TONE_DOT[tone])} />
+        <div className="min-w-0">
+          <p className="text-xl font-semibold">{headline.title}</p>
+          <p className="tnum opacity-80">{headline.detail}</p>
+        </div>
+      </div>
+
+      {alreadyToday && (
+        <p className="text-warn-ink text-lg font-medium">Déjà entré aujourd&apos;hui à {formatTime(alreadyToday)}</p>
+      )}
+
+      <div className="mt-auto flex flex-col gap-2">
+        {canCheckIn(status) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onCheckIn(null)}
+            className="brand-fill flex h-20 items-center justify-center gap-3 rounded-2xl text-2xl font-semibold shadow-lg shadow-black/30 transition-transform active:scale-[0.98] disabled:opacity-60"
+          >
+            <Check aria-hidden className="size-7" strokeWidth={3} />
+            Valider l&apos;entrée
+          </button>
+        )}
+
+        {canOverride(status) &&
+          (overrideOpen ? (
+            <div className="flex flex-col gap-2" role="group" aria-label="Raison de l'accès exceptionnel">
+              <p className="text-muted-foreground px-1 text-sm">Pourquoi le laisser entrer ?</p>
+              {(Object.keys(OVERRIDE_LABELS) as OverrideReason[]).map((reason) => (
+                <button
+                  key={reason}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onCheckIn(reason)}
+                  className="h-14 rounded-2xl bg-white/[0.06] px-5 text-left text-lg font-medium transition-colors hover:bg-white/[0.1] active:scale-[0.99] disabled:opacity-60"
+                >
+                  {OVERRIDE_LABELS[reason]}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOverride}
+              className="h-16 rounded-2xl border border-white/[0.12] text-xl font-semibold transition-colors hover:bg-white/[0.06]"
             >
-              Confirmer l&apos;entrée
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              Laisser entrer quand même
+            </button>
+          ))}
+      </div>
     </div>
+  );
+}
+
+/** Full-screen confirmation, readable from across the desk. Tap anywhere to close. */
+function FlashOverlay({ flash, onDismiss }: { flash: Flash; onDismiss: () => void }) {
+  const ok = flash.kind === "ok";
+  return (
+    <button
+      type="button"
+      role="status"
+      aria-live="assertive"
+      onClick={onDismiss}
+      className="bg-background/85 animate-in fade-in fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-8 text-center backdrop-blur-xl duration-200"
+    >
+      <span
+        className={cn(
+          "animate-in zoom-in-50 grid size-36 place-items-center rounded-full text-white shadow-2xl duration-300",
+          ok ? "bg-ok shadow-ok/40" : "bg-stop shadow-stop/40",
+        )}
+      >
+        {ok ? (
+          <Check aria-hidden className="size-20" strokeWidth={3} />
+        ) : (
+          <X aria-hidden className="size-20" strokeWidth={3} />
+        )}
+      </span>
+      {ok ? (
+        <div>
+          <p className="text-5xl font-bold tracking-tight">{flash.name}</p>
+          <p className="text-muted-foreground tnum mt-2 text-2xl">
+            Entrée validée à {flash.time}
+            {flash.override && " · accès exceptionnel"}
+          </p>
+        </div>
+      ) : (
+        <p className="max-w-xl text-2xl font-semibold">{flash.message}</p>
+      )}
+    </button>
   );
 }
