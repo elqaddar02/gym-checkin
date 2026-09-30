@@ -38,7 +38,7 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="panel-surface w-full max-w-md rounded-2xl border-border/80 bg-surface/90 backdrop-blur-sm">
+    <Card className="login-card-enter panel-surface w-full max-w-md rounded-2xl border-border/80 bg-surface/90 backdrop-blur-sm">
       <CardHeader className="pb-3">
         <CardTitle className="text-2xl tracking-[0.08em] uppercase text-foreground">Espace propriétaire</CardTitle>
         <CardDescription className="text-sm text-muted-foreground">Membres, paiements et tableau de bord.</CardDescription>

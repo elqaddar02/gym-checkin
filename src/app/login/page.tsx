@@ -10,8 +10,8 @@ export default async function LoginPage() {
   const brand = await getBrand();
 
   return (
-    <main className="bg-background flex min-h-dvh flex-col items-center justify-center gap-6 px-4 py-10">
-      <div className="flex flex-col items-center gap-3 text-center">
+    <main className="login-stage bg-background flex min-h-dvh flex-col items-center justify-center gap-6 px-4 py-10">
+      <div className="login-brand-enter flex flex-col items-center gap-3 text-center">
         <BrandMark brand={brand} size="lg" />
         <div>
           <h1 className="text-2xl font-semibold uppercase">{brand.name}</h1>
@@ -23,7 +23,7 @@ export default async function LoginPage() {
       <Suspense>
         <LoginForm />
       </Suspense>
-      <p className="text-muted-foreground max-w-xs text-center text-xs">
+      <p className="login-note-enter text-muted-foreground max-w-xs text-center text-xs">
         Cet espace est réservé au propriétaire. L&apos;écran d&apos;accueil de la réception
         n&apos;a pas besoin de connexion.
       </p>

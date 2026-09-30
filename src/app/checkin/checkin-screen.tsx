@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Delete, Search, X } from "lucide-react";
+import { Check, Delete, ScanLine, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { requestBackgroundSync } from "@/components/service-worker";
@@ -366,15 +366,15 @@ export function CheckinScreen({
       : { tone: "ok", label: "En ligne" };
 
   return (
-    <div className="world-tablet dark bg-background text-foreground relative flex min-h-dvh flex-col overflow-hidden">
+    <div className="world-tablet kiosk-screen dark bg-background text-foreground relative flex min-h-dvh flex-col overflow-hidden">
       {/* A soft wash of the gym's colour behind everything. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-40 h-[28rem] opacity-25 blur-3xl"
+        className="kiosk-ambient pointer-events-none absolute inset-x-0 -top-40 h-[28rem] opacity-25 blur-3xl"
         style={{ background: "radial-gradient(50% 60% at 50% 0%, var(--brand), transparent 70%)" }}
       />
 
-      <header className="relative mx-auto flex w-full max-w-6xl items-center gap-3 px-4 pt-4 sm:px-8 sm:pt-5">
+      <header className="kiosk-header-enter relative mx-auto flex w-full max-w-6xl items-center gap-3 px-4 pt-4 sm:px-8 sm:pt-5">
         <BrandMark brand={brand} size="md" />
         <div className="min-w-0">
           <h1 className="truncate text-lg leading-tight font-semibold">{brand.name}</h1>
@@ -398,8 +398,8 @@ export function CheckinScreen({
 
       <main className="relative mx-auto grid w-full max-w-6xl flex-1 content-center gap-5 px-4 py-5 sm:gap-6 sm:px-8 sm:py-6 lg:grid-cols-2 lg:gap-10">
         {/* ---- what is typed, and the keypad to type it ---- */}
-        <div className={cn("flex flex-col gap-4", selected && "max-lg:hidden")}>
-          <label className="group flex h-[4.5rem] items-center gap-4 rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 transition-[border-color,background-color,box-shadow] duration-200 focus-within:border-brand focus-within:bg-white/[0.06] focus-within:ring-2 focus-within:ring-brand/20 sm:h-20 sm:px-6">
+        <div className={cn("kiosk-search-enter flex flex-col gap-4", selected && "max-lg:hidden")}>
+          <label className="kiosk-search group flex h-[4.5rem] items-center gap-4 rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 transition-[border-color,background-color,box-shadow] duration-200 focus-within:border-brand focus-within:bg-white/[0.06] focus-within:ring-2 focus-within:ring-brand/20 sm:h-20 sm:px-6">
             <Search aria-hidden className="text-muted-foreground size-6 shrink-0" />
             <input
               ref={inputRef}
@@ -440,7 +440,7 @@ export function CheckinScreen({
         {/* ---- who was found ---- */}
         <section
           className={cn(
-            "flex flex-col rounded-xl border border-white/[0.1] bg-white/[0.03] p-3 lg:min-h-[22rem]",
+            "kiosk-panel-enter flex flex-col rounded-xl border border-white/[0.1] bg-white/[0.03] p-3 lg:min-h-[22rem]",
             // On a narrow screen the keypad alone says what to do.
             !selected && query.trim() === "" && "max-lg:hidden",
           )}
@@ -458,7 +458,7 @@ export function CheckinScreen({
               onCancel={reset}
             />
           ) : query.trim() === "" ? (
-            <Placeholder title="Qui entre ?" detail="Tapez le numéro de téléphone du membre, ou son nom." />
+            <Placeholder title="Prêt à accueillir" detail="Recherchez un membre pour confirmer son arrivée." ready />
           ) : results.length === 0 ? (
             <Placeholder
               title="Aucun membre trouvé"
@@ -470,11 +470,11 @@ export function CheckinScreen({
             />
           ) : (
             <ul className="flex flex-col gap-1" aria-label="Résultats">
-              {results.map((m) => {
+              {results.map((m, index) => {
                 const status = statuses.get(m.id)!;
                 const tone = statusTone(status);
                 return (
-                  <li key={m.id}>
+                  <li key={m.id} className="kiosk-result-enter" style={{ animationDelay: `${index * 45}ms` }}>
                     <button
                       type="button"
                       onClick={() => select(m.id)}
@@ -520,7 +520,7 @@ function Key({
       onClick={onClick}
       aria-label={label}
       className={cn(
-        "grid h-[4.5rem] place-items-center rounded-lg text-3xl font-semibold transition-[background-color,transform] duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        "kiosk-key grid h-[4.5rem] place-items-center rounded-lg text-3xl font-semibold transition-[background-color,transform] duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         "bg-white/[0.05] hover:bg-white/[0.09] active:scale-95 active:bg-white/[0.12]",
         muted && "text-muted-foreground bg-transparent",
       )}
@@ -544,11 +544,15 @@ function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   );
 }
 
-function Placeholder({ title, detail }: { title: string; detail: string }) {
+function Placeholder({ title, detail, ready = false }: { title: string; detail: string; ready?: boolean }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="grid size-16 place-items-center rounded-full bg-white/[0.05]">
-        <Search aria-hidden className="text-muted-foreground size-7" />
+    <div className="kiosk-placeholder-enter flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+      <span className={cn("grid size-16 place-items-center rounded-full bg-white/[0.05]", ready && "kiosk-scanner")}>
+        {ready ? (
+          <ScanLine aria-hidden className="text-brand-ink size-7" />
+        ) : (
+          <Search aria-hidden className="text-muted-foreground size-7" />
+        )}
       </span>
       <p className="text-xl font-semibold">{title}</p>
       <p className="text-muted-foreground max-w-xs">{detail}</p>
@@ -579,7 +583,7 @@ function MemberCard({
   const headline = statusHeadline(status);
 
   return (
-    <div className="flex flex-1 flex-col gap-5 p-3" aria-label="Membre sélectionné">
+    <div className="kiosk-member-enter flex flex-1 flex-col gap-5 p-3" aria-label="Membre sélectionné">
       <div className="flex items-start gap-3 sm:gap-4">
         <Avatar name={member.name} large />
         <div className="min-w-0 flex-1 pt-1">
@@ -660,11 +664,11 @@ function FlashOverlay({ flash, onDismiss }: { flash: Flash; onDismiss: () => voi
       role="status"
       aria-live="assertive"
       onClick={onDismiss}
-      className="bg-background/85 animate-in fade-in fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-8 text-center backdrop-blur-xl duration-200"
+      className="kiosk-flash-enter bg-background/85 fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-8 text-center backdrop-blur-xl"
     >
       <span
         className={cn(
-          "animate-in zoom-in-50 grid size-36 place-items-center rounded-full text-white shadow-2xl duration-300",
+          "checkin-confirm-mark grid size-36 place-items-center rounded-full text-white shadow-2xl",
           ok ? "bg-ok shadow-ok/40" : "bg-stop shadow-stop/40",
         )}
       >
