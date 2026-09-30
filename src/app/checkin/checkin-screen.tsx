@@ -374,32 +374,32 @@ export function CheckinScreen({
         style={{ background: "radial-gradient(50% 60% at 50% 0%, var(--brand), transparent 70%)" }}
       />
 
-      <header className="relative flex items-center gap-3 px-5 pt-5 sm:px-8">
+      <header className="relative mx-auto flex w-full max-w-6xl items-center gap-3 px-4 pt-4 sm:px-8 sm:pt-5">
         <BrandMark brand={brand} size="md" />
         <div className="min-w-0">
           <h1 className="truncate text-lg leading-tight font-semibold">{brand.name}</h1>
           {brand.city && <p className="text-muted-foreground truncate text-sm">{brand.city}</p>}
         </div>
 
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-2 sm:gap-4">
           <span
-            className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm font-medium"
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-1.5 text-xs font-medium sm:text-sm"
             title={pendingCount > 0 ? `${pendingCount} entrée(s) en attente d'envoi` : undefined}
           >
             <span className={cn("size-2 rounded-full", TONE_DOT[connection.tone])} />
             {connection.label}
             {pendingCount > 0 && <span className="text-warn-ink tnum">· {pendingCount}</span>}
           </span>
-          <span className="font-display tnum text-3xl font-semibold tracking-tight" suppressHydrationWarning>
+          <span className="tnum text-2xl font-semibold tracking-normal sm:text-3xl" suppressHydrationWarning>
             {clock ?? "--:--"}
           </span>
         </div>
       </header>
 
-      <main className="relative mx-auto grid w-full max-w-5xl flex-1 content-center gap-6 px-5 py-6 sm:px-8 lg:grid-cols-2 lg:gap-10">
+      <main className="relative mx-auto grid w-full max-w-6xl flex-1 content-center gap-5 px-4 py-5 sm:gap-6 sm:px-8 sm:py-6 lg:grid-cols-2 lg:gap-10">
         {/* ---- what is typed, and the keypad to type it ---- */}
         <div className={cn("flex flex-col gap-4", selected && "max-lg:hidden")}>
-          <label className="group flex h-20 items-center gap-4 rounded-3xl border border-white/[0.08] bg-white/[0.04] px-6 transition-colors focus-within:border-[var(--brand)] focus-within:bg-white/[0.06]">
+          <label className="group flex h-[4.5rem] items-center gap-4 rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 transition-[border-color,background-color,box-shadow] duration-200 focus-within:border-brand focus-within:bg-white/[0.06] focus-within:ring-2 focus-within:ring-brand/20 sm:h-20 sm:px-6">
             <Search aria-hidden className="text-muted-foreground size-6 shrink-0" />
             <input
               ref={inputRef}
@@ -417,7 +417,7 @@ export function CheckinScreen({
               onKeyDown={onKeyDown}
               placeholder="Téléphone ou nom"
               aria-label="Rechercher un membre par téléphone ou nom"
-              className="placeholder:text-muted-foreground/60 font-display tnum w-full min-w-0 bg-transparent text-3xl font-semibold tracking-wide outline-none [&::-webkit-search-cancel-button]:hidden"
+              className="placeholder:text-muted-foreground/60 tnum w-full min-w-0 bg-transparent text-2xl font-semibold tracking-normal outline-none sm:text-3xl [&::-webkit-search-cancel-button]:hidden"
             />
           </label>
 
@@ -440,7 +440,7 @@ export function CheckinScreen({
         {/* ---- who was found ---- */}
         <section
           className={cn(
-            "flex flex-col rounded-3xl border border-white/[0.08] bg-white/[0.03] p-3 backdrop-blur lg:min-h-[22rem]",
+            "flex flex-col rounded-xl border border-white/[0.1] bg-white/[0.03] p-3 lg:min-h-[22rem]",
             // On a narrow screen the keypad alone says what to do.
             !selected && query.trim() === "" && "max-lg:hidden",
           )}
@@ -478,7 +478,7 @@ export function CheckinScreen({
                     <button
                       type="button"
                       onClick={() => select(m.id)}
-                      className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.05] active:bg-white/[0.08]"
+                      className="flex min-h-[4.5rem] w-full items-center gap-4 rounded-lg px-3 py-3 text-left transition-colors duration-150 hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                     >
                       <Avatar name={m.name} />
                       <span className="min-w-0 flex-1">
@@ -520,7 +520,7 @@ function Key({
       onClick={onClick}
       aria-label={label}
       className={cn(
-        "font-display grid h-[4.5rem] place-items-center rounded-2xl text-3xl font-semibold transition-all select-none",
+        "grid h-[4.5rem] place-items-center rounded-lg text-3xl font-semibold transition-[background-color,transform] duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         "bg-white/[0.05] hover:bg-white/[0.09] active:scale-95 active:bg-white/[0.12]",
         muted && "text-muted-foreground bg-transparent",
       )}
@@ -580,10 +580,10 @@ function MemberCard({
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-3" aria-label="Membre sélectionné">
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <Avatar name={member.name} large />
         <div className="min-w-0 flex-1 pt-1">
-          <h2 className="truncate text-3xl font-bold tracking-tight">{member.name}</h2>
+          <h2 className="truncate text-2xl font-bold tracking-normal sm:text-3xl">{member.name}</h2>
           <p className="text-muted-foreground tnum text-lg">{formatPhone(member.phone)}</p>
         </div>
         <button
@@ -596,7 +596,7 @@ function MemberCard({
         </button>
       </div>
 
-      <div className={cn("flex items-center gap-3 rounded-2xl px-5 py-4", TONE_PANEL[tone])}>
+      <div className={cn("flex items-center gap-3 rounded-lg px-4 py-4 sm:px-5", TONE_PANEL[tone])}>
         <span className={cn("size-3 shrink-0 rounded-full", TONE_DOT[tone])} />
         <div className="min-w-0">
           <p className="text-xl font-semibold">{headline.title}</p>
@@ -614,7 +614,7 @@ function MemberCard({
             type="button"
             disabled={busy}
             onClick={() => onCheckIn(null)}
-            className="brand-fill flex h-20 items-center justify-center gap-3 rounded-2xl text-2xl font-semibold shadow-lg shadow-black/30 transition-transform active:scale-[0.98] disabled:opacity-60"
+            className="brand-fill flex min-h-[4.5rem] items-center justify-center gap-3 rounded-lg text-xl font-semibold shadow-lg shadow-black/25 transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 sm:h-20 sm:text-2xl"
           >
             <Check aria-hidden className="size-7" strokeWidth={3} />
             Valider l&apos;entrée
@@ -631,7 +631,7 @@ function MemberCard({
                   type="button"
                   disabled={busy}
                   onClick={() => onCheckIn(reason)}
-                  className="h-14 rounded-2xl bg-white/[0.06] px-5 text-left text-lg font-medium transition-colors hover:bg-white/[0.1] active:scale-[0.99] disabled:opacity-60"
+                  className="min-h-14 rounded-lg bg-white/[0.06] px-5 text-left text-base font-medium transition-colors duration-150 hover:bg-white/[0.1] active:scale-[0.99] disabled:opacity-60 sm:text-lg"
                 >
                   {OVERRIDE_LABELS[reason]}
                 </button>
@@ -641,7 +641,7 @@ function MemberCard({
             <button
               type="button"
               onClick={onOverride}
-              className="h-16 rounded-2xl border border-white/[0.12] text-xl font-semibold transition-colors hover:bg-white/[0.06]"
+              className="min-h-14 rounded-lg border border-white/[0.12] text-lg font-semibold transition-colors duration-150 hover:bg-white/[0.06] sm:h-16 sm:text-xl"
             >
               Laisser entrer quand même
             </button>

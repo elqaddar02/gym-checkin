@@ -58,8 +58,8 @@ export default async function MembersPage(props: PageProps<"/members">) {
     <>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[26px] font-semibold uppercase">Membres</h1>
-          <p className="text-muted-foreground tnum text-[13px]">
+          <h1 className="text-[26px] leading-tight font-semibold tracking-normal">Membres</h1>
+          <p className="text-muted-foreground tnum mt-1 text-sm">
             {all.length} membre{all.length > 1 ? "s" : ""}
             {query && " correspondant à la recherche"}
           </p>
@@ -85,10 +85,10 @@ export default async function MembersPage(props: PageProps<"/members">) {
               type="search"
               defaultValue={query}
               placeholder="Nom ou téléphone…"
-              className="bg-card h-9 pl-9"
+              className="bg-card h-10 pl-9"
             />
           </div>
-          <Button type="submit" variant="outline" className="h-9">
+          <Button type="submit" variant="outline" className="h-10">
             Rechercher
           </Button>
         </form>
@@ -103,7 +103,7 @@ export default async function MembersPage(props: PageProps<"/members">) {
                 href={{ pathname: "/members", query: { ...(query ? { q: query } : {}), ...(key === "all" ? {} : { filter: key }) } }}
                 aria-current={on ? "true" : undefined}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-[13px] font-medium transition-colors",
+                  "min-h-9 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors",
                   on
                     ? "border-brand-line bg-brand-soft text-foreground font-semibold"
                     : "bg-card text-muted-foreground hover:text-foreground",
@@ -142,7 +142,7 @@ export default async function MembersPage(props: PageProps<"/members">) {
                 </TableRow>
               )}
               {members.map((m) => (
-                <TableRow key={m.id}>
+                <TableRow key={m.id} className="h-[60px]">
                   <TableCell>
                     <div className="flex items-center gap-2.5">
                       <span

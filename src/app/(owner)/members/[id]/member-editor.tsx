@@ -132,12 +132,12 @@ export function MemberEditor({ member, openRenew }: { member: MemberDetail; open
       <header className="bg-card flex flex-wrap items-start gap-4 rounded-xl border p-4">
         <span
           aria-hidden
-          className="bg-brand-soft text-brand-ink font-display grid size-14 shrink-0 place-items-center rounded-[14px] text-[22px] font-bold"
+          className="bg-brand-soft text-brand-ink grid size-14 shrink-0 place-items-center rounded-lg text-[22px] font-bold"
         >
           {initials(member.name)}
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[26px] leading-tight font-semibold uppercase">{member.name}</h1>
+          <h1 className="truncate text-[26px] leading-tight font-semibold tracking-normal">{member.name}</h1>
           <p className="text-muted-foreground tnum text-sm">{formatPhone(member.phone)}</p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <StatusBadge status={member.status} />

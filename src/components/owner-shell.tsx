@@ -41,11 +41,11 @@ export function OwnerShell({
 
   return (
     <div className="bg-background flex min-h-dvh flex-col md:flex-row">
-      <aside className="bg-sidebar flex shrink-0 flex-col gap-4 border-b p-3 md:w-56 md:border-r md:border-b-0 md:p-3">
-        <div className="flex items-center gap-2.5 px-1 py-0.5">
+      <aside className="bg-sidebar flex shrink-0 flex-col gap-4 border-b p-4 md:w-60 md:border-r md:border-b-0 md:p-4">
+        <div className="flex items-center gap-3 px-1 py-1">
           <BrandMark brand={brand} size="sm" />
           <span className="min-w-0">
-            <span className="font-display block truncate text-[17px] leading-tight font-semibold uppercase">
+            <span className="block truncate text-[15px] leading-tight font-semibold">
               {brand.name}
             </span>
             {brand.city && (
@@ -63,7 +63,7 @@ export function OwnerShell({
           {SECTIONS.map((section) => (
             <div key={section.group ?? "main"} className="contents md:block">
               {section.group && (
-                <span className="eyebrow mt-3 hidden px-2.5 pb-1 md:block">{section.group}</span>
+                <span className="eyebrow mt-4 hidden px-3 pb-1 md:block">{section.group}</span>
               )}
               <span className="contents md:flex md:flex-col md:gap-0.5">
                 {section.links.map((link) => {
@@ -75,7 +75,7 @@ export function OwnerShell({
                       href={link.href}
                       aria-current={on ? "page" : undefined}
                       className={cn(
-                        "flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium whitespace-nowrap transition-colors",
+                        "flex min-h-10 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                         on
                           ? "bg-accent text-foreground shadow-[inset_2px_0_0_var(--brand)] font-semibold"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -91,7 +91,7 @@ export function OwnerShell({
           ))}
         </nav>
 
-        <div className="mt-auto hidden border-t pt-3 md:block">
+        <div className="mt-auto border-t pt-3">
           <p className="text-muted-foreground truncate text-xs" title={owner.email}>
             {owner.username}
           </p>
@@ -106,8 +106,8 @@ export function OwnerShell({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-5 md:px-6">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">{children}</div>
+      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <div className="owner-content mx-auto flex w-full max-w-6xl flex-col gap-5">{children}</div>
       </main>
     </div>
   );

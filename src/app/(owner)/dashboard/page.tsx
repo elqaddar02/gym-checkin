@@ -56,8 +56,8 @@ export default async function DashboardPage() {
     <>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[26px] font-semibold uppercase">Tableau de bord</h1>
-          <p className="text-muted-foreground text-[13px]">
+          <h1 className="text-[26px] leading-tight font-semibold tracking-normal">Tableau de bord</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
             {weekday} {formatFullDate(today)}
           </p>
         </div>

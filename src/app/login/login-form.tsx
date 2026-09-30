@@ -38,15 +38,15 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle className="text-xl uppercase">Espace propriétaire</CardTitle>
-        <CardDescription>Membres, paiements et tableau de bord.</CardDescription>
+    <Card className="panel-surface w-full max-w-md rounded-2xl border-border/80 bg-surface/90 backdrop-blur-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-2xl tracking-[0.08em] uppercase text-foreground">Espace propriétaire</CardTitle>
+        <CardDescription className="text-sm text-muted-foreground">Membres, paiements et tableau de bord.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="username">Identifiant</Label>
+            <Label htmlFor="username" className="text-xs tracking-[0.12em] text-muted-foreground uppercase">Identifiant</Label>
             {/* autoCapitalize/autoCorrect off: a tablet keyboard would otherwise
                 capitalise the first letter of the identifiant. */}
             <Input
@@ -59,15 +59,15 @@ export function LoginForm() {
               spellCheck={false}
               required
               autoFocus
-              className="h-10"
+              className="h-11 rounded-xl border-border bg-background/80 text-foreground placeholder:text-muted-foreground/80 focus-visible:ring-2 focus-visible:ring-primary/70"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="password">Mot de passe</Label>
-            <Input id="password" name="password" type="password" autoComplete="current-password" required className="h-10" />
+            <Label htmlFor="password" className="text-xs tracking-[0.12em] text-muted-foreground uppercase">Mot de passe</Label>
+            <Input id="password" name="password" type="password" autoComplete="current-password" required className="h-11 rounded-xl border-border bg-background/80 text-foreground placeholder:text-muted-foreground/80 focus-visible:ring-2 focus-visible:ring-primary/70" />
           </div>
           {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-          <Button type="submit" className="h-11" disabled={pending}>
+          <Button type="submit" className="h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_12px_24px_rgba(0,0,0,0.35)] hover:brightness-110" disabled={pending}>
             {pending ? "Connexion…" : "Se connecter"}
           </Button>
         </form>

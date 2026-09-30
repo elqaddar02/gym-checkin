@@ -61,8 +61,8 @@ export function NewMemberForm() {
             Membres
           </Link>
         </Button>
-        <h1 className="mt-1 text-[26px] font-semibold uppercase">Nouveau membre</h1>
-        <p className="text-muted-foreground text-[13px]">
+        <h1 className="mt-1 text-[26px] leading-tight font-semibold tracking-normal">Nouveau membre</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
           Le membre pourra entrer dès que la tablette d&apos;accueil se synchronise.
         </p>
       </div>
@@ -150,9 +150,14 @@ export function NewMemberForm() {
           {error}
         </p>
       )}
-      <Button type="submit" className="h-11 self-end px-8" disabled={pending}>
-        {pending ? "Enregistrement…" : "Enregistrer le membre"}
-      </Button>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button asChild variant="outline" className="h-11">
+          <Link href="/members">Annuler</Link>
+        </Button>
+        <Button type="submit" className="h-11 px-8" disabled={pending}>
+          {pending ? "Enregistrement…" : "Enregistrer le membre"}
+        </Button>
+      </div>
     </form>
   );
 }

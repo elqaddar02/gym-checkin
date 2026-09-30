@@ -20,7 +20,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-display: var(--font-display);
+  --font-display: var(--font-sans);
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
   --font-heading: var(--font-display);
 
@@ -98,53 +98,53 @@
 /* ─────────────────────────── console (light) ─────────────────────────── */
 
 .world-console {
-  --background: #f2f4f1;
-  --foreground: #14171a;
-  --surface: #ffffff;
-  --surface-2: #f7f8f6;
+  --background: #fbf3df;
+  --foreground: #191a18;
+  --surface: #fffdf4;
+  --surface-2: #f8f0dc;
 
-  --card: #ffffff;
-  --card-foreground: #14171a;
-  --popover: #ffffff;
-  --popover-foreground: #14171a;
+  --card: #fffdf4;
+  --card-foreground: #191a18;
+  --popover: #fffdf4;
+  --popover-foreground: #191a18;
 
   --primary: var(--brand);
   --primary-foreground: var(--on-brand);
-  --secondary: #eceee9;
-  --secondary-foreground: #14171a;
-  --muted: #f0f2ee;
-  --muted-foreground: #626c72;
+  --secondary: #f3ead2;
+  --secondary-foreground: #25241f;
+  --muted: #f4ecd9;
+  --muted-foreground: #68645a;
   --accent: var(--brand-soft);
-  --accent-foreground: #14171a;
+  --accent-foreground: #282115;
 
-  --destructive: #d93a2b;
-  --border: #e2e6e0;
-  --input: #dce0da;
+  --destructive: #c83d2d;
+  --border: #e9dfc6;
+  --input: #e4dac0;
   --ring: var(--brand);
 
-  --ok: #2fa96b;
-  --ok-soft: #e4f5ec;
-  --ok-ink: #1c7a4a;
-  --warn: #d08700;
-  --warn-soft: #fbf0d8;
-  --warn-ink: #8a5a00;
-  --stop: #d93a2b;
-  --stop-soft: #fbe6e3;
-  --stop-ink: #a62b1e;
+  --ok: #258451;
+  --ok-soft: #e4f2e7;
+  --ok-ink: #24673e;
+  --warn: #ae7400;
+  --warn-soft: #fbf0d1;
+  --warn-ink: #795300;
+  --stop: #c83d2d;
+  --stop-soft: #f8e6df;
+  --stop-ink: #963627;
 
   --chart-1: var(--brand);
-  --chart-2: color-mix(in oklab, var(--brand) 62%, #ffffff);
-  --chart-3: color-mix(in oklab, var(--brand) 34%, #ffffff);
-  --chart-4: #8f999f;
-  --chart-5: #c8cec9;
+  --chart-2: color-mix(in oklab, var(--brand) 70%, #fffdf4);
+  --chart-3: color-mix(in oklab, var(--brand) 38%, #fffdf4);
+  --chart-4: #8f8878;
+  --chart-5: #d5cbb3;
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #14171a;
+  --sidebar: #fffdf4;
+  --sidebar-foreground: #191a18;
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--on-brand);
-  --sidebar-accent: var(--brand-soft);
-  --sidebar-accent-foreground: #14171a;
-  --sidebar-border: #e2e6e0;
+  --sidebar-accent: #f8efcf;
+  --sidebar-accent-foreground: #282115;
+  --sidebar-border: #e9dfc6;
   --sidebar-ring: var(--brand);
 }
 
@@ -212,14 +212,72 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans), sans-serif;
+    line-height: 1.5;
+    background-image:
+      radial-gradient(ellipse at 12% 0%, color-mix(in oklab, var(--brand) 8%, transparent), transparent 34%),
+      linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0));
   }
   h1,
   h2,
   h3,
   h4 {
-    font-family: var(--font-display);
-    letter-spacing: 0.005em;
+    font-family: var(--font-sans), sans-serif;
+    letter-spacing: 0;
     text-wrap: balance;
+  }
+}
+
+@layer components {
+  .panel-surface {
+    @apply border border-border/80 bg-surface shadow-[0_8px_24px_rgba(93,69,17,0.06)];
+  }
+
+  .owner-content > * {
+    animation: owner-rise 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  }
+
+  .owner-content > :nth-child(2) {
+    animation-delay: 55ms;
+  }
+
+  .owner-content > :nth-child(3) {
+    animation-delay: 100ms;
+  }
+
+  .owner-content > :nth-child(4) {
+    animation-delay: 145ms;
+  }
+
+  .owner-content > :nth-child(n + 5) {
+    animation-delay: 185ms;
+  }
+
+  aside nav a {
+    transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+  }
+
+  aside nav a:hover {
+    transform: translateX(2px);
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@keyframes owner-rise {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -231,7 +289,7 @@
 
   /* The small uppercase caption above a number or a list. */
   .eyebrow {
-    @apply text-[11px] font-semibold tracking-[0.11em] text-muted-foreground uppercase;
+    @apply text-[11px] font-semibold tracking-[0.04em] text-muted-foreground;
     font-family: var(--font-sans);
   }
 

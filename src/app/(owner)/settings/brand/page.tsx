@@ -10,8 +10,8 @@ export default async function BrandSettingsPage() {
   return (
     <>
       <header>
-        <h1 className="text-[26px] font-semibold uppercase">Identité &amp; couleurs</h1>
-        <p className="text-muted-foreground text-[13px]">
+        <h1 className="text-[26px] leading-tight font-semibold tracking-normal">Identité &amp; couleurs</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
           Le nom, le logo et les couleurs de la salle. Ils s&apos;appliquent à l&apos;écran
           d&apos;accueil, au tableau de bord et à la page de connexion.
         </p>
