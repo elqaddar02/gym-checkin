@@ -1,51 +1,45 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { requireOwner } from "@/lib/auth";
 import { dbDateToYmd, todayYmd } from "@/lib/dates";
+import { buildPdfReport, toCsv } from "@/lib/export";
 import { prisma } from "@/lib/prisma";
-
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  let s = String(value);
-  // Neutralize spreadsheet formula injection (but keep phone numbers like +212… intact).
-  if (/^[=@\t\r]|^[+\-][^\d]/.test(s)) s = `'${s}`;
-  return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function toCsv(rows: unknown[][]): string {
-  return rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-}
 
 // One row per subscription (members without one get a single row), so the file is a full backup.
 export async function GET(request: Request) {
   const owner = await requireOwner();
   if (owner instanceof NextResponse) return owner;
 
-  const type = new URL(request.url).searchParams.get("type") ?? "members";
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") ?? "members";
+  const format = url.searchParams.get("format") ?? "csv";
 
-  let csv: string;
+  let rows: unknown[][];
+  let title: string;
   if (type === "checkins") {
     const checkIns = await prisma.checkIn.findMany({
       orderBy: { checkedInAt: "desc" },
       include: { member: { select: { name: true, phone: true } } },
     });
-    csv = toCsv([
+    title = "Gym Check-In — Historique des entrées";
+    rows = [
       ["checkin_id", "member_id", "name", "phone", "checked_in_at", "override_reason"],
       ...checkIns.map((c) => [c.id, c.memberId, c.member.name, c.member.phone, c.checkedInAt.toISOString(), c.overrideReason]),
-    ]);
+    ];
   } else {
     const members = await prisma.member.findMany({
       orderBy: { name: "asc" },
       include: { subscriptions: { orderBy: { startDate: "desc" } } },
     });
+    title = "Gym Check-In — Membres et abonnements";
     const header = [
       "member_id", "name", "phone", "member_notes", "member_created_at",
       "subscription_id", "status", "amount_mad", "start_date", "end_date",
       "payment_method", "receipt_number", "subscription_notes", "subscription_created_at", "created_by",
     ];
-    const rows: unknown[][] = [header];
+    rows = [header];
     for (const m of members) {
       const base = [m.id, m.name, m.phone, m.notes, m.createdAt.toISOString()];
-      if (m.subscriptions.length === 0) rows.push([...base, "", "", "", "", "", "", "", "", "", ""]);
+      if (m.subscriptions.length === 0) rows.push([...base, "", "", "", "", "", "", "", "", ""]);
       for (const s of m.subscriptions) {
         rows.push([
           ...base, s.id, s.status, s.amount, dbDateToYmd(s.startDate), dbDateToYmd(s.endDate),
@@ -53,9 +47,24 @@ export async function GET(request: Request) {
         ]);
       }
     }
-    csv = toCsv(rows);
   }
 
+  if (format === "pdf") {
+    const pdf = buildPdfReport({
+      title,
+      subtitle: `Exporté le ${todayYmd()}`,
+      rows,
+    });
+    return new NextResponse(Buffer.from(pdf, "latin1"), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="gym-${type}-${todayYmd()}.pdf"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  const csv = toCsv(rows);
   return new NextResponse("﻿" + csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

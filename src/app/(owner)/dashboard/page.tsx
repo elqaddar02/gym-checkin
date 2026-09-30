@@ -61,19 +61,23 @@ export default async function DashboardPage() {
             {weekday} {formatFullDate(today)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <a href="/api/export?type=members">
+        <div className="flex flex-wrap items-center gap-2">
+          <form className="flex flex-wrap items-center gap-2" action="/api/export" method="get">
+            <label className="sr-only" htmlFor="export-type">Type d’export</label>
+            <select id="export-type" name="type" defaultValue="members" className="bg-card border-border text-foreground h-9 rounded-md border px-2 text-sm">
+              <option value="members">Membres</option>
+              <option value="checkins">Entrées</option>
+            </select>
+            <label className="sr-only" htmlFor="export-format">Format</label>
+            <select id="export-format" name="format" defaultValue="pdf" className="bg-card border-border text-foreground h-9 rounded-md border px-2 text-sm">
+              <option value="pdf">PDF</option>
+              <option value="csv">CSV</option>
+            </select>
+            <Button type="submit" variant="outline" size="sm">
               <FileDown aria-hidden className="size-4" />
-              Membres
-            </a>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <a href="/api/export?type=checkins">
-              <FileDown aria-hidden className="size-4" />
-              Entrées
-            </a>
-          </Button>
+              Télécharger
+            </Button>
+          </form>
           <Button asChild size="sm">
             <Link href="/members/new">
               <Plus aria-hidden className="size-4" />
