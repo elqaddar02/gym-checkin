@@ -97,6 +97,8 @@ export interface DashboardData {
     /** Same measure over the previous month, for the trend line. */
     previousTotal: number;
   };
+  /** Revenue per month, oldest first; the last entry is the current month. */
+  revenueByMonth: { month: string; total: number }[];
   expiringSoon: { id: string; name: string; phone: string; until: string; daysLeft: number; amount: number }[];
   checkInsToday: { total: number; byHour: number[]; lastWeek: number };
   members: { total: number; active: number; expired: number; paused: number; none: number };
@@ -105,20 +107,38 @@ export interface DashboardData {
   activity: ActivityEntry[];
 }
 
+/** How many months the revenue chart covers, the current one included. */
+const REVENUE_MONTHS = 6;
+
 export async function getDashboard(): Promise<DashboardData> {
   const today = todayYmd();
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
   const nextMonthStart = addDays(`${month}-28`, 7).slice(0, 7) + "-01";
-  const prevMonthStart = addDays(monthStart, -1).slice(0, 7) + "-01";
+  // The first day of this month and of each month before it, oldest first.
+  const monthStarts = [monthStart];
+  while (monthStarts.length < REVENUE_MONTHS) {
+    monthStarts.unshift(addDays(monthStarts[0], -1).slice(0, 7) + "-01");
+  }
+  const prevMonthStart = monthStarts[monthStarts.length - 2];
 
   // Revenue = payments whose period starts this month (so imported history doesn't inflate it).
   const paidSince = await prisma.subscription.findMany({
-    where: { startDate: { gte: ymdToDbDate(prevMonthStart), lt: ymdToDbDate(nextMonthStart) } },
+    where: { startDate: { gte: ymdToDbDate(monthStarts[0]), lt: ymdToDbDate(nextMonthStart) } },
     select: { amount: true, paymentMethod: true, startDate: true },
   });
   const monthSubs = paidSince.filter((s) => dbDateToYmd(s.startDate) >= monthStart);
-  const prevSubs = paidSince.filter((s) => dbDateToYmd(s.startDate) < monthStart);
+  const prevSubs = paidSince.filter((s) => {
+    const start = dbDateToYmd(s.startDate);
+    return start >= prevMonthStart && start < monthStart;
+  });
+  const revenueByMonth = monthStarts.map((start) => {
+    const m = start.slice(0, 7);
+    return {
+      month: m,
+      total: paidSince.filter((s) => dbDateToYmd(s.startDate).startsWith(m)).reduce((sum, s) => sum + s.amount, 0),
+    };
+  });
 
   const byMethod: Record<PaymentMethod, number> = { cash: 0, card: 0, transfer: 0 };
   for (const s of monthSubs) byMethod[s.paymentMethod] += s.amount;
@@ -208,6 +228,7 @@ export async function getDashboard(): Promise<DashboardData> {
       count: monthSubs.length,
       previousTotal: prevSubs.reduce((sum, s) => sum + s.amount, 0),
     },
+    revenueByMonth,
     expiringSoon,
     checkInsToday: {
       total: todays.length,
