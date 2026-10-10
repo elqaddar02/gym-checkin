@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Delete, ScanLine, Search, X } from "lucide-react";
+import { ArrowLeft, Check, Delete, ScanLine, Search, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { requestBackgroundSync } from "@/components/service-worker";
@@ -366,15 +367,12 @@ export function CheckinScreen({
       : { tone: "ok", label: "En ligne" };
 
   return (
-    <div className="world-tablet kiosk-screen dark bg-background text-foreground relative flex min-h-dvh flex-col overflow-hidden">
-      {/* A soft wash of the gym's colour behind everything. */}
-      <div
-        aria-hidden
-        className="kiosk-ambient pointer-events-none absolute inset-x-0 -top-40 h-[28rem] opacity-25 blur-3xl"
-        style={{ background: "radial-gradient(50% 60% at 50% 0%, var(--brand), transparent 70%)" }}
-      />
-
-      <header className="kiosk-header-enter relative mx-auto flex w-full max-w-6xl items-center gap-3 px-4 pt-4 sm:px-8 sm:pt-5">
+    <div className="world-console kiosk-screen relative flex min-h-dvh flex-col bg-background text-foreground">
+      <header className="kiosk-header-enter relative mx-auto flex w-full max-w-6xl flex-wrap items-center gap-3 px-4 pt-4 sm:px-8 sm:pt-5">
+        <Link href="/dashboard" className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-md border border-border/80 bg-card px-3 text-sm font-medium shadow-[0_3px_12px_rgba(93,69,17,0.035)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+          <ArrowLeft aria-hidden className="size-4" />
+          Retour au tableau de bord
+        </Link>
         <BrandMark brand={brand} size="md" />
         <div className="min-w-0">
           <h1 className="truncate text-lg leading-tight font-semibold">{brand.name}</h1>
@@ -383,7 +381,7 @@ export function CheckinScreen({
 
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
           <span
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-1.5 text-xs font-medium sm:text-sm"
+            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border/80 bg-card px-3 py-1.5 text-xs font-medium shadow-[0_3px_12px_rgba(93,69,17,0.035)] sm:text-sm"
             title={pendingCount > 0 ? `${pendingCount} entrée(s) en attente d'envoi` : undefined}
           >
             <span className={cn("size-2 rounded-full", TONE_DOT[connection.tone])} />
@@ -396,10 +394,10 @@ export function CheckinScreen({
         </div>
       </header>
 
-      <main className="relative mx-auto grid w-full max-w-6xl flex-1 content-center gap-5 px-4 py-5 sm:gap-6 sm:px-8 sm:py-6 lg:grid-cols-2 lg:gap-10">
+      <main className="relative mx-auto grid w-full max-w-6xl flex-1 content-center gap-4 px-4 py-5 sm:gap-5 sm:px-8 sm:py-6 lg:grid-cols-2 lg:gap-6">
         {/* ---- what is typed, and the keypad to type it ---- */}
         <div className={cn("kiosk-search-enter flex flex-col gap-4", selected && "max-lg:hidden")}>
-          <label className="kiosk-search group flex h-[4.5rem] items-center gap-4 rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 transition-[border-color,background-color,box-shadow] duration-200 focus-within:border-brand focus-within:bg-white/[0.06] focus-within:ring-2 focus-within:ring-brand/20 sm:h-20 sm:px-6">
+          <label className="kiosk-search group flex h-[4.5rem] items-center gap-4 rounded-lg border border-border/80 bg-card px-4 shadow-[0_3px_12px_rgba(93,69,17,0.035)] transition-[border-color,background-color,box-shadow] duration-200 focus-within:border-brand focus-within:bg-card focus-within:ring-2 focus-within:ring-brand/20 sm:h-20 sm:px-6">
             <Search aria-hidden className="text-muted-foreground size-6 shrink-0" />
             <input
               ref={inputRef}
@@ -440,7 +438,7 @@ export function CheckinScreen({
         {/* ---- who was found ---- */}
         <section
           className={cn(
-            "kiosk-panel-enter flex flex-col rounded-xl border border-white/[0.1] bg-white/[0.03] p-3 lg:min-h-[22rem]",
+            "kiosk-panel-enter flex flex-col rounded-lg border border-border/80 bg-card p-3 shadow-[0_3px_12px_rgba(93,69,17,0.035)] lg:min-h-[22rem]",
             // On a narrow screen the keypad alone says what to do.
             !selected && query.trim() === "" && "max-lg:hidden",
           )}
@@ -478,7 +476,7 @@ export function CheckinScreen({
                     <button
                       type="button"
                       onClick={() => select(m.id)}
-                      className="flex min-h-[4.5rem] w-full items-center gap-4 rounded-lg px-3 py-3 text-left transition-colors duration-150 hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                      className="flex min-h-[4.5rem] w-full items-center gap-4 rounded-md px-3 py-3 text-left transition-colors duration-150 hover:bg-muted active:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                     >
                       <Avatar name={m.name} />
                       <span className="min-w-0 flex-1">
@@ -521,8 +519,8 @@ function Key({
       aria-label={label}
       className={cn(
         "kiosk-key grid h-[4.5rem] place-items-center rounded-lg text-3xl font-semibold transition-[background-color,transform] duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-        "bg-white/[0.05] hover:bg-white/[0.09] active:scale-95 active:bg-white/[0.12]",
-        muted && "text-muted-foreground bg-transparent",
+        "border border-border/80 bg-card shadow-[0_3px_12px_rgba(93,69,17,0.035)] hover:bg-muted active:scale-95 active:bg-secondary",
+        muted && "text-muted-foreground bg-muted/60",
       )}
     >
       {children}
@@ -547,7 +545,7 @@ function Avatar({ name, large = false }: { name: string; large?: boolean }) {
 function Placeholder({ title, detail, ready = false }: { title: string; detail: string; ready?: boolean }) {
   return (
     <div className="kiosk-placeholder-enter flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className={cn("grid size-16 place-items-center rounded-full bg-white/[0.05]", ready && "kiosk-scanner")}>
+      <span className={cn("grid size-16 place-items-center rounded-full bg-muted", ready && "kiosk-scanner")}>
         {ready ? (
           <ScanLine aria-hidden className="text-brand-ink size-7" />
         ) : (
@@ -594,7 +592,7 @@ function MemberCard({
           type="button"
           onClick={onCancel}
           aria-label="Annuler"
-          className="text-muted-foreground grid size-11 shrink-0 place-items-center rounded-full transition-colors hover:bg-white/[0.08]"
+          className="text-muted-foreground grid size-11 shrink-0 place-items-center rounded-full transition-colors hover:bg-muted"
         >
           <X aria-hidden className="size-6" />
         </button>
@@ -618,7 +616,7 @@ function MemberCard({
             type="button"
             disabled={busy}
             onClick={() => onCheckIn(null)}
-            className="brand-fill flex min-h-[4.5rem] items-center justify-center gap-3 rounded-lg text-xl font-semibold shadow-lg shadow-black/25 transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 sm:h-20 sm:text-2xl"
+            className="flex min-h-[4.5rem] items-center justify-center gap-3 rounded-md bg-primary text-xl font-semibold text-primary-foreground shadow-[0_3px_12px_rgba(93,69,17,0.12)] transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 sm:h-20 sm:text-2xl"
           >
             <Check aria-hidden className="size-7" strokeWidth={3} />
             Valider l&apos;entrée
@@ -635,7 +633,7 @@ function MemberCard({
                   type="button"
                   disabled={busy}
                   onClick={() => onCheckIn(reason)}
-                  className="min-h-14 rounded-lg bg-white/[0.06] px-5 text-left text-base font-medium transition-colors duration-150 hover:bg-white/[0.1] active:scale-[0.99] disabled:opacity-60 sm:text-lg"
+                  className="min-h-14 rounded-md border border-border/80 bg-card px-5 text-left text-base font-medium shadow-[0_3px_12px_rgba(93,69,17,0.035)] transition-colors duration-150 hover:bg-muted active:scale-[0.99] disabled:opacity-60 sm:text-lg"
                 >
                   {OVERRIDE_LABELS[reason]}
                 </button>
@@ -645,7 +643,7 @@ function MemberCard({
             <button
               type="button"
               onClick={onOverride}
-              className="min-h-14 rounded-lg border border-white/[0.12] text-lg font-semibold transition-colors duration-150 hover:bg-white/[0.06] sm:h-16 sm:text-xl"
+              className="min-h-14 rounded-md border border-border/80 bg-card text-lg font-semibold transition-colors duration-150 hover:bg-muted sm:h-16 sm:text-xl"
             >
               Laisser entrer quand même
             </button>
