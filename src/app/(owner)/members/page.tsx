@@ -84,7 +84,7 @@ export default async function MembersPage(props: PageProps<"/members">) {
               name="q"
               type="search"
               defaultValue={query}
-              placeholder="Nom ou téléphone…"
+              placeholder="Code, nom ou téléphone…"
               className="bg-card h-10 pl-9"
             />
           </div>
@@ -121,6 +121,7 @@ export default async function MembersPage(props: PageProps<"/members">) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Code</TableHead>
                 <TableHead>Membre</TableHead>
                 <TableHead>Téléphone</TableHead>
                 <TableHead>Statut</TableHead>
@@ -132,7 +133,7 @@ export default async function MembersPage(props: PageProps<"/members">) {
             <TableBody>
               {members.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-10 text-center">
+                  <TableCell colSpan={7} className="text-muted-foreground py-10 text-center">
                     {query
                       ? "Aucun membre ne correspond à cette recherche."
                       : active === "all"
@@ -143,6 +144,7 @@ export default async function MembersPage(props: PageProps<"/members">) {
               )}
               {members.map((m) => (
                 <TableRow key={m.id} className="h-[60px]">
+                  <TableCell className="tnum font-semibold">{m.code}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2.5">
                       <span

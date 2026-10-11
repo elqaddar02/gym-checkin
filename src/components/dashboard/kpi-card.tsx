@@ -1,22 +1,12 @@
 import { ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { cardClass, tileTones, type TileTone } from "@/components/surface";
 import { cn } from "@/lib/utils";
 import { CountUp } from "./count-up";
 
-export type KpiTone = "brand" | "ok" | "warn" | "stop" | "muted";
-
-const TONES: Record<KpiTone, string> = {
-  brand: "bg-brand-soft text-brand-ink",
-  ok: "bg-ok-soft text-ok-ink",
-  warn: "bg-warn-soft text-warn-ink",
-  stop: "bg-stop-soft text-stop-ink",
-  muted: "bg-muted text-muted-foreground",
-};
-
-/** The card every dashboard panel sits on, so edges and shadows line up. */
-export const cardClass =
-  "rounded-xl border border-border/80 bg-card shadow-[0_1px_2px_rgba(25,26,24,0.04),0_6px_20px_rgba(93,69,17,0.05)]";
+export { cardClass } from "@/components/surface";
+export type KpiTone = TileTone;
 
 /**
  * One headline figure: what it is, the number, and how it moved.
@@ -45,7 +35,7 @@ export function KpiCard({
   const body = (
     <>
       <div className="flex items-start justify-between">
-        <span className={cn("grid size-10 place-items-center rounded-lg [&_svg]:size-5", TONES[tone])}>{icon}</span>
+        <span className={cn("grid size-10 place-items-center rounded-lg [&_svg]:size-5", tileTones[tone])}>{icon}</span>
         {href && (
           <ArrowUpRight
             aria-hidden

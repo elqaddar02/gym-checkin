@@ -6,6 +6,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { createMemberWithCode } from "../src/lib/member-code";
 import { normalizePhone } from "../src/lib/phone";
 
 const CREATED_BY = "import";
@@ -101,7 +102,7 @@ async function main() {
     const existing = await prisma.member.findUnique({ where: { phone } });
     const member = existing
       ? await prisma.member.update({ where: { phone }, data: { name, notes: get(idx.notes) || existing.notes } })
-      : await prisma.member.create({ data: { name, phone, notes: get(idx.notes) || null } });
+      : await createMemberWithCode(prisma, { name, phone, notes: get(idx.notes) || null });
     if (existing) updated++; else created++;
 
     if (hasSub) {

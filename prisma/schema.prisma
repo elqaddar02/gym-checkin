@@ -27,6 +27,8 @@ enum OverrideReason {
 
 model Member {
   id            String         @id @default(uuid()) @db.Uuid
+  /// What the member gives at reception. The last code in use + 1; see src/lib/member-code.ts.
+  code          Int            @unique
   phone         String         @unique // normalized, e.g. +212612345678
   name          String
   notes         String?
