@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { requireOwner } from "@/lib/auth";
 import { ymdToDbDate } from "@/lib/dates";
+import { createMemberWithCode } from "@/lib/member-code";
 import { prisma } from "@/lib/prisma";
 import { listMembers } from "@/lib/queries";
 import { firstError, memberCreateSchema } from "@/lib/validation";
@@ -24,22 +25,20 @@ export async function POST(request: Request) {
   const { subscription, ...member } = parsed.data;
 
   try {
-    const created = await prisma.member.create({
-      data: {
-        ...member,
-        subscriptions: subscription
-          ? {
-              create: {
-                ...subscription,
-                startDate: ymdToDbDate(subscription.startDate),
-                endDate: ymdToDbDate(subscription.endDate),
-                createdBy: owner,
-              },
-            }
-          : undefined,
-      },
+    const created = await createMemberWithCode(prisma, {
+      ...member,
+      subscriptions: subscription
+        ? {
+            create: {
+              ...subscription,
+              startDate: ymdToDbDate(subscription.startDate),
+              endDate: ymdToDbDate(subscription.endDate),
+              createdBy: owner,
+            },
+          }
+        : undefined,
     });
-    return NextResponse.json({ id: created.id }, { status: 201 });
+    return NextResponse.json({ id: created.id, code: created.code }, { status: 201 });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return NextResponse.json({ error: "Ce numéro existe déjà" }, { status: 409 });

@@ -22,6 +22,7 @@ export function toReceptionMember(
 ): ReceptionMember {
   return {
     id: m.id,
+    code: m.code,
     name: m.name,
     phone: m.phone,
     notes: m.notes,

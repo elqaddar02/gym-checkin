@@ -8,6 +8,7 @@ import { OVERRIDE_LABELS, PAYMENT_LABELS, type OverrideReason, type PaymentMetho
 
 export interface MemberRow {
   id: string;
+  code: number;
   name: string;
   phone: string;
   notes: string | null;
@@ -32,6 +33,7 @@ export async function listMembers(query?: string): Promise<MemberRow[]> {
     .filter((m) => {
       if (!q) return true;
       if (m.name.toLowerCase().includes(q)) return true;
+      if (/^d+$/.test(q) && String(m.code) === q) return true;
       return digits.length >= 2 && phoneSearchKey(m.phone).includes(digits);
     })
     .map((m) => {
@@ -39,6 +41,7 @@ export async function listMembers(query?: string): Promise<MemberRow[]> {
       const status = memberStatus(subs, today);
       return {
         id: m.id,
+        code: m.code,
         name: m.name,
         phone: m.phone,
         notes: m.notes,
@@ -62,6 +65,7 @@ export async function getMemberDetail(id: string) {
   const subscriptions = member.subscriptions.map(toSubscriptionDTO);
   return {
     id: member.id,
+    code: member.code,
     name: member.name,
     phone: member.phone,
     notes: member.notes,

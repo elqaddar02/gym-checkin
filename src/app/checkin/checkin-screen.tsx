@@ -1,11 +1,13 @@
 "use client";
 
-import { ArrowLeft, Check, Delete, ScanLine, Search, X } from "lucide-react";
+import { CalendarClock, Check, ChevronRight, Delete, Hash, LayoutDashboard, ScanLine, Search, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { cardClass, tileTones } from "@/components/surface";
+import { Button } from "@/components/ui/button";
 import { requestBackgroundSync } from "@/components/service-worker";
-import { initialsOf, type Brand } from "@/lib/brand-format";
+import type { Brand } from "@/lib/brand-format";
 import { formatDayMonth, formatTime, localDate, todayYmd } from "@/lib/dates";
 import {
   enqueueCheckIn,
@@ -16,7 +18,9 @@ import {
   setCachedLastCheckIn,
   type QueuedCheckIn,
 } from "@/lib/offline-db";
-import { formatPhone, phoneQueryDigits, phoneSearchKey } from "@/lib/phone";
+import { formatCode } from "@/lib/member-code";
+import { formatPhone } from "@/lib/phone";
+import { searchMembers } from "@/lib/reception-search";
 import { memberStatus, statusShort, statusTone, type MemberStatus, type StatusTone } from "@/lib/status";
 import { OVERRIDE_LABELS, type OverrideReason, type ReceptionMember } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -37,11 +41,12 @@ const TONE_DOT: Record<StatusTone, string> = {
   muted: "bg-muted-foreground",
 };
 
-const TONE_TEXT: Record<StatusTone, string> = {
-  ok: "text-ok-ink",
-  warn: "text-warn-ink",
-  stop: "text-stop-ink",
-  muted: "text-muted-foreground",
+/** Status pills, the same shape as the dashboard's trend and urgency pills. */
+const TONE_PILL: Record<StatusTone, string> = {
+  ok: "bg-ok-soft text-ok-ink",
+  warn: "bg-warn-soft text-warn-ink",
+  stop: "bg-stop-soft text-stop-ink",
+  muted: "bg-muted text-muted-foreground",
 };
 
 const TONE_PANEL: Record<StatusTone, string> = {
@@ -52,10 +57,6 @@ const TONE_PANEL: Record<StatusTone, string> = {
 };
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
-
-function fold(s: string) {
-  return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-}
 
 function uuid(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -244,27 +245,8 @@ export function CheckinScreen({
     return map;
   }, [members, today]);
 
-  const results = useMemo(() => {
-    const q = query.trim();
-    if (!q) return [];
-    const digits = phoneQueryDigits(q);
-    const folded = fold(q);
-    const hasLetters = /\p{L}/u.test(q);
-    return members
-      .filter((m) =>
-        hasLetters ? fold(m.name).includes(folded) : digits.length > 0 && phoneSearchKey(m.phone).includes(digits),
-      )
-      .sort((a, b) => {
-        // Numbers that start with what was typed come first.
-        if (!hasLetters) {
-          const pa = phoneSearchKey(a.phone).startsWith(digits) ? 0 : 1;
-          const pb = phoneSearchKey(b.phone).startsWith(digits) ? 0 : 1;
-          if (pa !== pb) return pa - pb;
-        }
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, MAX_RESULTS);
-  }, [members, query]);
+  const search = useMemo(() => searchMembers(members, query, MAX_RESULTS), [members, query]);
+  const results = search.results;
 
   const selected = members.find((m) => m.id === selectedId) ?? null;
   const selectedStatus = selected ? statuses.get(selected.id)! : null;
@@ -338,8 +320,8 @@ export function CheckinScreen({
     e.preventDefault();
     if (selected && selectedStatus && canCheckIn(selectedStatus)) {
       void doCheckIn(selected, null);
-    } else if (!selected && results.length === 1) {
-      select(results[0].id);
+    } else if (!selected && (search.exact || results.length === 1)) {
+      select((search.exact ?? results[0]).id);
     }
   };
 
@@ -367,137 +349,195 @@ export function CheckinScreen({
       : { tone: "ok", label: "En ligne" };
 
   return (
-    <div className="world-console kiosk-screen relative flex min-h-dvh flex-col bg-background text-foreground">
-      <header className="kiosk-header-enter relative mx-auto flex w-full max-w-6xl flex-wrap items-center gap-3 px-4 pt-4 sm:px-8 sm:pt-5">
-        <Link href="/dashboard" className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-md border border-border/80 bg-card px-3 text-sm font-medium shadow-[0_3px_12px_rgba(93,69,17,0.035)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
-          <ArrowLeft aria-hidden className="size-4" />
-          Retour au tableau de bord
-        </Link>
-        <BrandMark brand={brand} size="md" />
-        <div className="min-w-0">
-          <h1 className="truncate text-lg leading-tight font-semibold">{brand.name}</h1>
-          {brand.city && <p className="text-muted-foreground truncate text-sm">{brand.city}</p>}
-        </div>
-
-        <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          <span
-            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border/80 bg-card px-3 py-1.5 text-xs font-medium shadow-[0_3px_12px_rgba(93,69,17,0.035)] sm:text-sm"
-            title={pendingCount > 0 ? `${pendingCount} entrée(s) en attente d'envoi` : undefined}
-          >
-            <span className={cn("size-2 rounded-full", TONE_DOT[connection.tone])} />
-            {connection.label}
-            {pendingCount > 0 && <span className="text-warn-ink tnum">· {pendingCount}</span>}
-          </span>
-          <span className="tnum text-2xl font-semibold tracking-normal sm:text-3xl" suppressHydrationWarning>
-            {clock ?? "--:--"}
-          </span>
-        </div>
-      </header>
-
-      <main className="relative mx-auto grid w-full max-w-6xl flex-1 content-center gap-4 px-4 py-5 sm:gap-5 sm:px-8 sm:py-6 lg:grid-cols-2 lg:gap-6">
-        {/* ---- what is typed, and the keypad to type it ---- */}
-        <div className={cn("kiosk-search-enter flex flex-col gap-4", selected && "max-lg:hidden")}>
-          <label className="kiosk-search group flex h-[4.5rem] items-center gap-4 rounded-lg border border-border/80 bg-card px-4 shadow-[0_3px_12px_rgba(93,69,17,0.035)] transition-[border-color,background-color,box-shadow] duration-200 focus-within:border-brand focus-within:bg-card focus-within:ring-2 focus-within:ring-brand/20 sm:h-20 sm:px-6">
-            <Search aria-hidden className="text-muted-foreground size-6 shrink-0" />
-            <input
-              ref={inputRef}
-              autoFocus
-              type="search"
-              inputMode="tel"
-              autoComplete="off"
-              spellCheck={false}
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setSelectedId(null);
-                setOverrideOpen(false);
-              }}
-              onKeyDown={onKeyDown}
-              placeholder="Téléphone ou nom"
-              aria-label="Rechercher un membre par téléphone ou nom"
-              className="placeholder:text-muted-foreground/60 tnum w-full min-w-0 bg-transparent text-2xl font-semibold tracking-normal outline-none sm:text-3xl [&::-webkit-search-cancel-button]:hidden"
-            />
-          </label>
-
-          <div className="grid grid-cols-3 gap-3" role="group" aria-label="Pavé numérique">
-            {KEYS.map((k) => (
-              <Key key={k} onClick={() => press(k)}>
-                {k}
-              </Key>
-            ))}
-            <Key onClick={() => press("clear")} label="Tout effacer" muted>
-              <X aria-hidden className="size-6" />
-            </Key>
-            <Key onClick={() => press("0")}>0</Key>
-            <Key onClick={() => press("back")} label="Effacer le dernier chiffre" muted>
-              <Delete aria-hidden className="size-6" />
-            </Key>
+    <div className="world-console kiosk-screen bg-background text-foreground flex min-h-dvh flex-col">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <header className="kiosk-header-enter flex flex-wrap items-center gap-3">
+          <BrandMark brand={brand} size="md" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-2xl font-bold sm:text-3xl">Accueil</h1>
+            <p className="text-muted-foreground truncate text-sm">
+              {brand.name}
+              {brand.city && ` · ${brand.city}`}
+            </p>
           </div>
-        </div>
 
-        {/* ---- who was found ---- */}
-        <section
-          className={cn(
-            "kiosk-panel-enter flex flex-col rounded-lg border border-border/80 bg-card p-3 shadow-[0_3px_12px_rgba(93,69,17,0.035)] lg:min-h-[22rem]",
-            // On a narrow screen the keypad alone says what to do.
-            !selected && query.trim() === "" && "max-lg:hidden",
-          )}
-          aria-live="polite"
-        >
-          {selected && selectedStatus ? (
-            <MemberCard
-              member={selected}
-              status={selectedStatus}
-              alreadyToday={alreadyToday}
-              busy={busy}
-              overrideOpen={overrideOpen}
-              onCheckIn={(reason) => void doCheckIn(selected, reason)}
-              onOverride={() => setOverrideOpen(true)}
-              onCancel={reset}
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold",
+                TONE_PILL[connection.tone],
+              )}
+              title={pendingCount > 0 ? `${pendingCount} entrée(s) en attente d'envoi` : undefined}
+            >
+              <span className={cn("size-2 rounded-full", TONE_DOT[connection.tone])} />
+              {connection.label}
+              {pendingCount > 0 && <span className="tnum">· {pendingCount}</span>}
+            </span>
+            <span
+              className={cn(cardClass, "tnum inline-flex h-9 items-center px-3 text-lg font-bold")}
+              suppressHydrationWarning
+            >
+              {clock ?? "--:--"}
+            </span>
+            <Button asChild variant="outline" size="sm" className="h-9">
+              <Link href="/dashboard">
+                <LayoutDashboard aria-hidden className="size-4" />
+                <span className="max-sm:sr-only">Tableau de bord</span>
+              </Link>
+            </Button>
+          </div>
+        </header>
+
+        <main className="grid flex-1 grid-cols-1 content-start gap-4 lg:grid-cols-2 lg:content-center">
+          {/* ---- the code being typed, and the keypad to type it ---- */}
+          <section className={cn(cardClass, "kiosk-search-enter flex flex-col gap-4 p-5", selected && "max-lg:hidden")}>
+            <PanelHeading
+              icon={<Hash />}
+              title="Code du membre"
+              detail="Tapez le code donné à l'inscription. Un numéro commençant par 0 cherche le téléphone."
             />
-          ) : query.trim() === "" ? (
-            <Placeholder title="Prêt à accueillir" detail="Recherchez un membre pour confirmer son arrivée." ready />
-          ) : results.length === 0 ? (
-            <Placeholder
-              title="Aucun membre trouvé"
-              detail={
-                loaded && members.length === 0
-                  ? "La liste des membres n'est pas encore chargée. Connectez la tablette à Internet."
-                  : "Vérifiez le numéro."
-              }
-            />
-          ) : (
-            <ul className="flex flex-col gap-1" aria-label="Résultats">
-              {results.map((m, index) => {
-                const status = statuses.get(m.id)!;
-                const tone = statusTone(status);
-                return (
-                  <li key={m.id} className="kiosk-result-enter" style={{ animationDelay: `${index * 45}ms` }}>
-                    <button
-                      type="button"
-                      onClick={() => select(m.id)}
-                      className="flex min-h-[4.5rem] w-full items-center gap-4 rounded-md px-3 py-3 text-left transition-colors duration-150 hover:bg-muted active:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-                    >
-                      <Avatar name={m.name} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-lg font-semibold">{m.name}</span>
-                        <span className="text-muted-foreground tnum block text-sm">{formatPhone(m.phone)}</span>
-                      </span>
-                      <span className={cn("flex shrink-0 items-center gap-2 text-sm font-medium", TONE_TEXT[tone])}>
-                        <span className={cn("size-2 rounded-full", TONE_DOT[tone])} />
-                        {statusShort(status)}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </main>
+
+            <label className="kiosk-search border-border bg-background focus-within:border-brand focus-within:ring-brand/20 flex h-20 items-center gap-3 rounded-lg border px-5 transition-[border-color,box-shadow] focus-within:ring-4">
+              <Search aria-hidden className="text-muted-foreground size-6 shrink-0" />
+              <input
+                ref={inputRef}
+                autoFocus
+                type="search"
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSelectedId(null);
+                  setOverrideOpen(false);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder="Code ou nom"
+                aria-label="Rechercher un membre par code, nom ou téléphone"
+                className="placeholder:text-muted-foreground/50 tnum w-full min-w-0 bg-transparent text-3xl font-bold outline-none [&::-webkit-search-cancel-button]:hidden"
+              />
+            </label>
+
+            <div className="grid grid-cols-3 gap-3" role="group" aria-label="Pavé numérique">
+              {KEYS.map((k) => (
+                <Key key={k} onClick={() => press(k)}>
+                  {k}
+                </Key>
+              ))}
+              <Key onClick={() => press("clear")} label="Tout effacer" muted>
+                <X aria-hidden className="size-6" />
+              </Key>
+              <Key onClick={() => press("0")}>0</Key>
+              <Key onClick={() => press("back")} label="Effacer le dernier chiffre" muted>
+                <Delete aria-hidden className="size-6" />
+              </Key>
+            </div>
+          </section>
+
+          {/* ---- who was found ---- */}
+          <section
+            className={cn(
+              cardClass,
+              "kiosk-panel-enter flex flex-col p-5 lg:min-h-[34rem]",
+              // On a narrow screen the keypad alone says what to do.
+              !selected && query.trim() === "" && "max-lg:hidden",
+            )}
+            aria-live="polite"
+          >
+            {selected && selectedStatus ? (
+              <MemberCard
+                member={selected}
+                status={selectedStatus}
+                alreadyToday={alreadyToday}
+                busy={busy}
+                overrideOpen={overrideOpen}
+                onCheckIn={(reason) => void doCheckIn(selected, reason)}
+                onOverride={() => setOverrideOpen(true)}
+                onCancel={reset}
+              />
+            ) : query.trim() === "" ? (
+              <Placeholder title="Prêt à accueillir" detail="Le membre donne son code, vous le tapez, il entre." ready />
+            ) : results.length === 0 ? (
+              <Placeholder
+                title="Aucun membre trouvé"
+                detail={
+                  loaded && members.length === 0
+                    ? "La liste des membres n'est pas encore chargée. Connectez la tablette à Internet."
+                    : search.mode === "code"
+                      ? "Aucun membre n'a ce code. Vérifiez-le, ou cherchez par nom."
+                      : "Vérifiez la saisie."
+                }
+              />
+            ) : (
+              <>
+                <PanelHeading
+                  icon={<Users />}
+                  title={search.exact ? "Membre trouvé" : "Résultats"}
+                  detail={
+                    search.mode === "code"
+                      ? "Touchez le membre pour vérifier son abonnement."
+                      : search.mode === "phone"
+                        ? "Recherche par téléphone."
+                        : "Recherche par nom."
+                  }
+                />
+                <ul className="mt-4 flex flex-col gap-2.5" aria-label="Résultats">
+                  {results.map((m, index) => {
+                    const status = statuses.get(m.id)!;
+                    const tone = statusTone(status);
+                    return (
+                      <li key={m.id} className="kiosk-result-enter" style={{ animationDelay: `${index * 45}ms` }}>
+                        <button
+                          type="button"
+                          onClick={() => select(m.id)}
+                          className={cn(
+                            "group hover:bg-brand-soft/60 hover:border-brand-line focus-visible:outline-brand flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2",
+                            m === search.exact && "border-brand-line bg-brand-soft/40",
+                          )}
+                        >
+                          <CodeTile code={m.code} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-lg font-semibold">{m.name}</span>
+                            <span className="text-muted-foreground tnum block truncate text-sm">
+                              {formatPhone(m.phone)}
+                            </span>
+                          </span>
+                          <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", TONE_PILL[tone])}>
+                            {statusShort(status)}
+                          </span>
+                          <ChevronRight
+                            aria-hidden
+                            className="text-muted-foreground size-5 shrink-0 transition-transform group-hover:translate-x-0.5"
+                          />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
+        </main>
+      </div>
 
       {flash && <FlashOverlay flash={flash} onDismiss={dismissFlash} />}
     </div>
+  );
+}
+
+/** Icon tile, title and one line of help — the heading every dashboard card has. */
+function PanelHeading({ icon, title, detail }: { icon: React.ReactNode; title: string; detail: string }) {
+  return (
+    <header className="flex items-start gap-3">
+      <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg [&_svg]:size-5", tileTones.brand)}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <p className="text-muted-foreground mt-0.5 text-[13px]">{detail}</p>
+      </div>
+    </header>
   );
 }
 
@@ -518,9 +558,10 @@ function Key({
       onClick={onClick}
       aria-label={label}
       className={cn(
-        "kiosk-key grid h-[4.5rem] place-items-center rounded-lg text-3xl font-semibold transition-[background-color,transform] duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-        "border border-border/80 bg-card shadow-[0_3px_12px_rgba(93,69,17,0.035)] hover:bg-muted active:scale-95 active:bg-secondary",
-        muted && "text-muted-foreground bg-muted/60",
+        "kiosk-key tnum focus-visible:outline-brand grid h-[4.5rem] place-items-center rounded-xl border text-3xl font-bold transition-[background-color,transform] duration-150 select-none focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95",
+        muted
+          ? "bg-muted text-muted-foreground hover:bg-secondary border-transparent"
+          : "border-border/80 bg-background hover:bg-brand-soft/60 active:bg-brand-soft",
       )}
     >
       {children}
@@ -528,32 +569,35 @@ function Key({
   );
 }
 
-function Avatar({ name, large = false }: { name: string; large?: boolean }) {
+/** The member's code in a tile, where an avatar would be: it is what reception reads. */
+function CodeTile({ code, large = false }: { code?: number | null; large?: boolean }) {
   return (
     <span
-      aria-hidden
+      aria-label={formatCode(code)}
       className={cn(
-        "bg-brand-soft text-brand-ink font-display grid shrink-0 place-items-center rounded-full font-bold",
-        large ? "size-20 text-3xl" : "size-11 text-base",
+        "tnum grid shrink-0 place-items-center font-bold",
+        tileTones.brand,
+        large ? "size-20 rounded-xl text-3xl" : "size-12 rounded-lg text-lg",
       )}
     >
-      {initialsOf(name)}
+      {code ?? "—"}
     </span>
   );
 }
 
 function Placeholder({ title, detail, ready = false }: { title: string; detail: string; ready?: boolean }) {
   return (
-    <div className="kiosk-placeholder-enter flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className={cn("grid size-16 place-items-center rounded-full bg-muted", ready && "kiosk-scanner")}>
-        {ready ? (
-          <ScanLine aria-hidden className="text-brand-ink size-7" />
-        ) : (
-          <Search aria-hidden className="text-muted-foreground size-7" />
+    <div className="kiosk-placeholder-enter flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+      <span
+        className={cn(
+          "grid size-16 place-items-center rounded-xl",
+          ready ? cn(tileTones.brand, "kiosk-scanner") : tileTones.muted,
         )}
+      >
+        {ready ? <ScanLine aria-hidden className="size-7" /> : <Search aria-hidden className="size-7" />}
       </span>
       <p className="text-xl font-semibold">{title}</p>
-      <p className="text-muted-foreground max-w-xs">{detail}</p>
+      <p className="text-muted-foreground max-w-xs text-sm">{detail}</p>
     </div>
   );
 }
@@ -581,42 +625,51 @@ function MemberCard({
   const headline = statusHeadline(status);
 
   return (
-    <div className="kiosk-member-enter flex flex-1 flex-col gap-5 p-3" aria-label="Membre sélectionné">
-      <div className="flex items-start gap-3 sm:gap-4">
-        <Avatar name={member.name} large />
+    <div className="kiosk-member-enter flex flex-1 flex-col gap-5" aria-label="Membre sélectionné">
+      <div className="flex items-start gap-4">
+        <CodeTile code={member.code} large />
         <div className="min-w-0 flex-1 pt-1">
-          <h2 className="truncate text-2xl font-bold tracking-normal sm:text-3xl">{member.name}</h2>
-          <p className="text-muted-foreground tnum text-lg">{formatPhone(member.phone)}</p>
+          <p className="text-muted-foreground tnum text-sm font-medium">{formatCode(member.code)}</p>
+          <h2 className="truncate text-2xl font-bold sm:text-3xl">{member.name}</h2>
+          <p className="text-muted-foreground tnum">{formatPhone(member.phone)}</p>
         </div>
         <button
           type="button"
           onClick={onCancel}
           aria-label="Annuler"
-          className="text-muted-foreground grid size-11 shrink-0 place-items-center rounded-full transition-colors hover:bg-muted"
+          className="text-muted-foreground hover:bg-muted grid size-11 shrink-0 place-items-center rounded-lg transition-colors"
         >
           <X aria-hidden className="size-6" />
         </button>
       </div>
 
-      <div className={cn("flex items-center gap-3 rounded-lg px-4 py-4 sm:px-5", TONE_PANEL[tone])}>
-        <span className={cn("size-3 shrink-0 rounded-full", TONE_DOT[tone])} />
+      <div className={cn("flex items-center gap-4 rounded-xl p-4", TONE_PANEL[tone])}>
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white/50">
+          {tone === "ok" ? (
+            <Check aria-hidden className="size-5" strokeWidth={3} />
+          ) : (
+            <CalendarClock aria-hidden className="size-5" />
+          )}
+        </span>
         <div className="min-w-0">
-          <p className="text-xl font-semibold">{headline.title}</p>
-          <p className="tnum opacity-80">{headline.detail}</p>
+          <p className="text-lg font-semibold">{headline.title}</p>
+          <p className="tnum text-sm opacity-80">{headline.detail}</p>
         </div>
       </div>
 
       {alreadyToday && (
-        <p className="text-warn-ink text-lg font-medium">Déjà entré aujourd&apos;hui à {formatTime(alreadyToday)}</p>
+        <p className={cn("rounded-lg px-4 py-3 text-base font-semibold", TONE_PANEL.warn)}>
+          Déjà entré aujourd&apos;hui à {formatTime(alreadyToday)}
+        </p>
       )}
 
-      <div className="mt-auto flex flex-col gap-2">
+      <div className="mt-auto flex flex-col gap-2.5">
         {canCheckIn(status) && (
           <button
             type="button"
             disabled={busy}
             onClick={() => onCheckIn(null)}
-            className="flex min-h-[4.5rem] items-center justify-center gap-3 rounded-md bg-primary text-xl font-semibold text-primary-foreground shadow-[0_3px_12px_rgba(93,69,17,0.12)] transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 sm:h-20 sm:text-2xl"
+            className="bg-primary text-primary-foreground flex h-20 items-center justify-center gap-3 rounded-xl text-2xl font-bold shadow-[0_6px_20px_rgba(93,69,17,0.14)] transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.99] disabled:opacity-60"
           >
             <Check aria-hidden className="size-7" strokeWidth={3} />
             Valider l&apos;entrée
@@ -626,27 +679,24 @@ function MemberCard({
         {canOverride(status) &&
           (overrideOpen ? (
             <div className="flex flex-col gap-2" role="group" aria-label="Raison de l'accès exceptionnel">
-              <p className="text-muted-foreground px-1 text-sm">Pourquoi le laisser entrer ?</p>
+              <p className="text-muted-foreground px-1 text-sm font-medium">Pourquoi le laisser entrer ?</p>
               {(Object.keys(OVERRIDE_LABELS) as OverrideReason[]).map((reason) => (
                 <button
                   key={reason}
                   type="button"
                   disabled={busy}
                   onClick={() => onCheckIn(reason)}
-                  className="min-h-14 rounded-md border border-border/80 bg-card px-5 text-left text-base font-medium shadow-[0_3px_12px_rgba(93,69,17,0.035)] transition-colors duration-150 hover:bg-muted active:scale-[0.99] disabled:opacity-60 sm:text-lg"
+                  className="hover:bg-brand-soft/60 hover:border-brand-line flex min-h-14 items-center justify-between rounded-lg border px-4 text-left text-base font-semibold transition-colors active:scale-[0.99] disabled:opacity-60"
                 >
                   {OVERRIDE_LABELS[reason]}
+                  <ChevronRight aria-hidden className="text-muted-foreground size-5" />
                 </button>
               ))}
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={onOverride}
-              className="min-h-14 rounded-md border border-border/80 bg-card text-lg font-semibold transition-colors duration-150 hover:bg-muted sm:h-16 sm:text-xl"
-            >
+            <Button variant="outline" onClick={onOverride} className="h-14 rounded-xl text-lg font-semibold">
               Laisser entrer quand même
-            </button>
+            </Button>
           ))}
       </div>
     </div>
@@ -662,7 +712,7 @@ function FlashOverlay({ flash, onDismiss }: { flash: Flash; onDismiss: () => voi
       role="status"
       aria-live="assertive"
       onClick={onDismiss}
-      className="kiosk-flash-enter bg-background/85 fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-8 text-center backdrop-blur-xl"
+      className="world-console kiosk-flash-enter bg-background/85 text-foreground fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-8 text-center backdrop-blur-xl"
     >
       <span
         className={cn(
@@ -678,7 +728,7 @@ function FlashOverlay({ flash, onDismiss }: { flash: Flash; onDismiss: () => voi
       </span>
       {ok ? (
         <div>
-          <p className="text-5xl font-bold tracking-tight">{flash.name}</p>
+          <p className="text-5xl font-bold">{flash.name}</p>
           <p className="text-muted-foreground tnum mt-2 text-2xl">
             Entrée validée à {flash.time}
             {flash.override && " · accès exceptionnel"}

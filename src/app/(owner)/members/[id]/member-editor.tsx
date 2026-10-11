@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDayMonth, formatFullDate, formatTime, localDate, todayYmd } from "@/lib/dates";
+import { formatCode } from "@/lib/member-code";
 import { formatPhone } from "@/lib/phone";
 import type { MemberDetail } from "@/lib/queries";
 import { currentSubscription } from "@/lib/status";
@@ -138,7 +139,9 @@ export function MemberEditor({ member, openRenew }: { member: MemberDetail; open
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[26px] leading-tight font-semibold tracking-normal">{member.name}</h1>
-          <p className="text-muted-foreground tnum text-sm">{formatPhone(member.phone)}</p>
+          <p className="text-muted-foreground tnum text-sm">
+            <span className="text-foreground font-semibold">{formatCode(member.code)}</span> · {formatPhone(member.phone)}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <StatusBadge status={member.status} />
             <Runway status={member.status} className="min-w-36 max-w-48" />

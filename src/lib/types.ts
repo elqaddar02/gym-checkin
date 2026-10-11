@@ -20,6 +20,8 @@ export interface SubscriptionDTO {
 /** What the reception tablet caches. */
 export interface ReceptionMember {
   id: string;
+  /** Reception code. Missing from tablet caches written before codes existed. */
+  code: number;
   name: string;
   phone: string;
   notes: string | null;
