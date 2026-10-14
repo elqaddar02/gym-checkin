@@ -53,3 +53,4 @@ then go offline in DevTools and reload.
 2. Run migrations against it: `npm run db:deploy`.
 3. Create the owner: `npm run owner -- email "password"` (with production `DATABASE_URL`).
 4. On the reception tablet, open `/checkin` once while online and "Add to Home Screen".
+# GYMroles21
